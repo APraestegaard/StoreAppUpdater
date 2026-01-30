@@ -1,0 +1,64 @@
+import React from 'react'
+
+interface ActionBarProps {
+    appsCount: number
+    selectedCount: number
+    isUpdating: boolean
+    isCheckingUpdates: boolean
+    onUpdateSelected: () => void
+    onUpdateAll: () => void
+    onCheckUpdates: () => void
+    onRefresh: () => void
+}
+
+export default function ActionBar({
+    appsCount,
+    selectedCount,
+    isUpdating,
+    isCheckingUpdates,
+    onUpdateSelected,
+    onUpdateAll,
+    onCheckUpdates,
+    onRefresh,
+}: ActionBarProps) {
+    return (
+        <div className="action-bar">
+            <div className="action-group primary">
+                <button
+                    onClick={onUpdateSelected}
+                    disabled={selectedCount === 0 || isUpdating}
+                    className="btn btn-primary"
+                    title={selectedCount === 0 ? 'Select apps to update' : `Update ${selectedCount} selected app(s)`}
+                >
+                    Update Selected {selectedCount > 0 && `(${selectedCount})`}
+                </button>
+                <button
+                    onClick={onUpdateAll}
+                    disabled={appsCount === 0 || isUpdating}
+                    className="btn btn-primary"
+                    title={appsCount === 0 ? 'No apps to update' : `Update all ${appsCount} app(s)`}
+                >
+                    Update All {appsCount > 0 && `(${appsCount})`}
+                </button>
+            </div>
+            <div className="action-group secondary">
+                <button
+                    onClick={onCheckUpdates}
+                    disabled={isCheckingUpdates || isUpdating}
+                    className="btn btn-secondary"
+                    title="Check ServiceNow store for new updates"
+                >
+                    {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
+                </button>
+                <button
+                    onClick={onRefresh}
+                    disabled={isUpdating}
+                    className="btn btn-secondary"
+                    title="Refresh app list"
+                >
+                    Refresh
+                </button>
+            </div>
+        </div>
+    )
+}
