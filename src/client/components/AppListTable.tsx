@@ -11,12 +11,27 @@ interface AppListTableProps {
 export default function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll }: AppListTableProps) {
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
+    const [searchQuery, setSearchQuery] = useState('')
+
+    // Filter apps based on search query
+    const filteredApps = useMemo(() => {
+        if (!searchQuery.trim()) {
+            return apps
+        }
+        const query = searchQuery.toLowerCase()
+        return apps.filter(app => 
+            app.name.toLowerCase().includes(query) ||
+            app.vendor.toLowerCase().includes(query) ||
+            app.version.toLowerCase().includes(query) ||
+            app.latest_version.toLowerCase().includes(query)
+        )
+    }, [apps, searchQuery])
 
     // Calculate pagination
-    const totalPages = Math.ceil(apps.length / pageSize)
+    const totalPages = Math.ceil(filteredApps.length / pageSize)
     const startIndex = (currentPage - 1) * pageSize
     const endIndex = startIndex + pageSize
-    const paginatedApps = useMemo(() => apps.slice(startIndex, endIndex), [apps, startIndex, endIndex])
+    const paginatedApps = useMemo(() => filteredApps.slice(startIndex, endIndex), [filteredApps, startIndex, endIndex])
 
     // Check if all visible apps on current page are selected
     const allSelected = paginatedApps.length > 0 && paginatedApps.every(app => selectedApps.has(app.sys_id))
@@ -38,6 +53,16 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
     const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setPageSize(Number(e.target.value))
         setCurrentPage(1) // Reset to first page when changing page size
+    }
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(e.target.value)
+        setCurrentPage(1) // Reset to first page when searching
+    }
+
+    const handleClearSearch = () => {
+        setSearchQuery('')
+        setCurrentPage(1)
     }
 
     const handlePreviousPage = () => {
@@ -100,22 +125,56 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         <div className="table-container">
             <div className="table-header">
                 <div className="table-info">
-                    Showing {startIndex + 1}-{Math.min(endIndex, apps.length)} of {apps.length} applications
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredApps.length)} of {filteredApps.length} 
+                    {searchQuery && ` (filtered from ${apps.length})`} applications
                 </div>
-                <div className="page-size-selector">
-                    <label htmlFor="pageSize">Show:</label>
-                    <select id="pageSize" value={pageSize} onChange={handlePageSizeChange}>
-                        <option value="5">5</option>
-                        <option value="10">10</option>
-                        <option value="25">25</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </select>
-                    <span>per page</span>
+                <div className="table-controls">
+                    <div className="search-box">
+                        <input
+                            type="text"
+                            placeholder="Search applications..."
+                            value={searchQuery}
+                            onChange={handleSearchChange}
+                            className="search-input"
+                            aria-label="Search applications"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={handleClearSearch}
+                                className="search-clear"
+                                aria-label="Clear search"
+                                title="Clear search"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
+                    <div className="page-size-selector">
+                        <label htmlFor="pageSize">Show:</label>
+                        <select id="pageSize" value={pageSize} onChange={handlePageSizeChange}>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span>per page</span>
+                    </div>
                 </div>
             </div>
 
-            <table className="sn-table">
+            {filteredApps.length === 0 && searchQuery ? (
+                <div className="no-results">
+                    <div className="no-results-icon">🔍</div>
+                    <h3>No applications found</h3>
+                    <p>No applications match your search for "{searchQuery}"</p>
+                    <button onClick={handleClearSearch} className="btn btn-secondary">
+                        Clear Search
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <table className="sn-table">
                 <thead>
                     <tr>
                         <th className="checkbox-col">
@@ -196,6 +255,8 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                         Next ›
                     </button>
                 </div>
+            )}
+                </>
             )}
         </div>
     )
