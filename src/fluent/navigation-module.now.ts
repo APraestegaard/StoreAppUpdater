@@ -13,6 +13,6 @@ export const storeAppModule = Record({
         query: 'x_1118332_store_ap_updater.do',
         order: 100,
         hint: 'View and update store applications',
-        roles: 'admin',
+        roles: ['admin'],
     },
 })
