@@ -118,7 +118,7 @@ export default function App() {
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
                 setSuccess(
-                    `Update batch created successfully! ${selectedApps.size} application(s) will be updated. Check progress below.`
+                    `Update batch created successfully! ${selectedApps.size} application(s) will be updated. Check progress above.`
                 )
             } else {
                 console.error('Update failed:', result.error)
@@ -158,7 +158,7 @@ export default function App() {
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
                 setSuccess(
-                    `Update batch created successfully! All ${apps.length} application(s) will be updated. Check progress below.`
+                    `Update batch created successfully! All ${apps.length} application(s) will be updated. Check progress above.`
                 )
             } else {
                 setError(result.error || 'Failed to start update process')

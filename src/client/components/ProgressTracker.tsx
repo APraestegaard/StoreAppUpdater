@@ -121,11 +121,11 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             <div className="progress-details">
                 {status.state === 'ready' ? (
                     <div className="preparing-message">
-                        <div className="loading-spinner">⏳</div>
+                        <div className="loading-spinner"></div>
                         <span className="preparing-text">
                             {status.total_apps > 0 
-                                ? `Preparing batch installation... (${status.total_apps} application${status.total_apps !== 1 ? 's' : ''} loaded)`
-                                : 'Preparing batch installation...'}
+                                ? `Preparing batch installation... This may take a few minutes. (${status.total_apps} application${status.total_apps !== 1 ? 's' : ''} loaded)`
+                                : 'Preparing batch installation... This may take a few minutes.'}
                         </span>
                     </div>
                 ) : (
