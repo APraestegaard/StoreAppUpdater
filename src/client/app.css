@@ -66,6 +66,31 @@ body {
     color: #2c8548;
 }
 
+.info-message {
+    background-color: #e3f2fd;
+    border-left: 4px solid #0073e6;
+    color: #014361;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.info-message strong {
+    font-weight: 600;
+}
+
+.info-message a {
+    color: #0073e6;
+    text-decoration: underline;
+    margin-left: 8px;
+}
+
+.info-message a:hover {
+    color: #005bb5;
+}
+
 .message-icon {
     font-size: 18px;
     margin-right: 12px;

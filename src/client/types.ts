@@ -27,3 +27,13 @@ export interface UpdateCheckResponse {
     success: boolean
     message: string
 }
+
+export interface BatchInProgressResponse {
+    inProgress: boolean
+    batchId?: string
+    batchName?: string
+    state?: string
+    createdOn?: string
+    link?: string
+    error?: string
+}

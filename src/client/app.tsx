@@ -16,6 +16,12 @@ export default function App() {
     const [success, setSuccess] = useState<string | null>(null)
     const [batchId, setBatchId] = useState<string | null>(null)
     const [executionTrackerId, setExecutionTrackerId] = useState<string | null>(null)
+    const [batchInProgress, setBatchInProgress] = useState<{
+        inProgress: boolean
+        batchName?: string
+        state?: string
+        link?: string
+    } | null>(null)
 
     const service = useMemo(() => new StoreAppService(), [])
 
@@ -36,7 +42,26 @@ export default function App() {
 
     useEffect(() => {
         void loadApps()
+        void checkForBatchInProgress()
     }, [])
+
+    const checkForBatchInProgress = async () => {
+        try {
+            const status = await service.checkBatchInProgress()
+            if (status.inProgress) {
+                setBatchInProgress({
+                    inProgress: true,
+                    batchName: status.batchName,
+                    state: status.state,
+                    link: status.link
+                })
+            } else {
+                setBatchInProgress(null)
+            }
+        } catch (err) {
+            console.error('Failed to check batch status:', err)
+        }
+    }
 
     const handleSelectApp = (sysId: string, selected: boolean) => {
         setSelectedApps((prev) => {
@@ -61,6 +86,13 @@ export default function App() {
     const handleUpdateSelected = async () => {
         if (selectedApps.size === 0) return
 
+        // Check for in-progress batch
+        await checkForBatchInProgress()
+        if (batchInProgress?.inProgress) {
+            setError(`Cannot start new update: Batch installation "${batchInProgress.batchName}" is currently ${batchInProgress.state}. Please wait for it to complete.`)
+            return
+        }
+
         if (!confirm(`Are you sure you want to update ${selectedApps.size} application(s)?`)) {
             return
         }
@@ -70,8 +102,9 @@ export default function App() {
             setError(null)
             setSuccess(null)
 
-            const appIds = Array.from(selectedApps)
-            const result = await service.updateSelectedApps(appIds, false)
+            // Get full app objects for selected apps
+            const selectedAppObjects = apps.filter((app) => selectedApps.has(app.sys_id))
+            const result = await service.updateSelectedApps(selectedAppObjects, false)
 
             if (result.success) {
                 setBatchId(result.batch_installation_id)
@@ -93,6 +126,13 @@ export default function App() {
     const handleUpdateAll = async () => {
         if (apps.length === 0) return
 
+        // Check for in-progress batch
+        await checkForBatchInProgress()
+        if (batchInProgress?.inProgress) {
+            setError(`Cannot start new update: Batch installation "${batchInProgress.batchName}" is currently ${batchInProgress.state}. Please wait for it to complete.`)
+            return
+        }
+
         if (!confirm(`Are you sure you want to update all ${apps.length} application(s)?`)) {
             return
         }
@@ -102,8 +142,8 @@ export default function App() {
             setError(null)
             setSuccess(null)
 
-            const appIds = apps.map((app) => app.sys_id)
-            const result = await service.updateSelectedApps(appIds, false)
+            // Pass all app objects for bulk update
+            const result = await service.updateSelectedApps(apps, false)
 
             if (result.success) {
                 setBatchId(result.batch_installation_id)
@@ -179,8 +219,16 @@ export default function App() {
                 </div>
             </header>
 
-            <main className="app-content">
-                {error && (
+            <main className="app-content">                {batchInProgress?.inProgress && (
+                    <div className="info-message">
+                        <strong>ℹ️ Batch Installation In Progress:</strong> "{batchInProgress.batchName}" is currently {batchInProgress.state}. 
+                        New updates are disabled until it completes. {batchInProgress.link && (
+                            <a href={batchInProgress.link} target="_blank" rel="noopener noreferrer" style={{color: '#0073e6', textDecoration: 'underline'}}>
+                                View Status
+                            </a>
+                        )}
+                    </div>
+                )}                {error && (
                     <div className="message error">
                         <span className="message-icon">⚠</span>
                         <span className="message-text">{error}</span>
@@ -205,7 +253,7 @@ export default function App() {
                 <ActionBar
                     appsCount={apps.length}
                     selectedCount={selectedApps.size}
-                    isUpdating={isUpdating}
+                    isUpdating={isUpdating || batchInProgress?.inProgress || false}
                     isCheckingUpdates={isCheckingUpdates}
                     onUpdateSelected={handleUpdateSelected}
                     onUpdateAll={handleUpdateAll}

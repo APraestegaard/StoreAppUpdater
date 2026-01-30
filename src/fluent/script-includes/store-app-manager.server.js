@@ -3,6 +3,42 @@ var StoreAppManager = Class.create();
 StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     
     /**
+     * Check if there's a batch installation currently in progress
+     * Returns JSON with status information
+     */
+    checkBatchInProgress: function() {
+        try {
+            var grBatch = new GlideRecord('sys_batch_install_plan');
+            grBatch.addQuery('state', 'IN', 'pending,in_progress');
+            grBatch.orderByDesc('sys_created_on');
+            grBatch.setLimit(1);
+            grBatch.query();
+            
+            if (grBatch.next()) {
+                return JSON.stringify({
+                    inProgress: true,
+                    batchId: grBatch.getUniqueValue(),
+                    batchName: grBatch.getValue('name') || 'Batch Installation',
+                    state: grBatch.getValue('state'),
+                    createdOn: grBatch.getValue('sys_created_on'),
+                    link: gs.getProperty('glide.servlet.uri') + 'sys_batch_install_plan.do?sys_id=' + grBatch.getUniqueValue()
+                });
+            }
+            
+            return JSON.stringify({
+                inProgress: false
+            });
+            
+        } catch (e) {
+            gs.error('StoreAppManager - checkBatchInProgress error: ' + e.message);
+            return JSON.stringify({
+                inProgress: false,
+                error: e.message
+            });
+        }
+    },
+    
+    /**
      * Get all store apps that need updates
      * Returns JSON array of apps with version information
      */
@@ -68,35 +104,34 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     
     /**
      * Update selected apps in batch
-     * @param appIdsJson - JSON array of sys_store_app sys_ids
+     * @param appsDataJson - JSON array of StoreApp objects from frontend
      * @param loadDemoData - boolean, whether to load demo data
      */
     updateSelectedApps: function() {
-        var appIdsJson = this.getParameter('sysparm_app_ids');
+        var appsDataJson = this.getParameter('sysparm_apps_data');
         var loadDemoData = this.getParameter('sysparm_load_demo_data') === 'true';
         
         try {
-            var appIds = JSON.parse(appIdsJson);
+            var appsData = JSON.parse(appsDataJson);
             var appsArray = [];
             
-            for (var i = 0; i < appIds.length; i++) {
-                var grSSA = new GlideRecord('sys_store_app');
-                if (grSSA.get(appIds[i])) {
-                    var appObject = {
-                        displayName: grSSA.getValue('name'),
-                        id: grSSA.getUniqueValue(),
-                        load_demo_data: loadDemoData,
-                        type: 'application',
-                        requested_version: grSSA.getValue('latest_version')
-                    };
-                    appsArray.push(appObject);
-                }
+            // Use the app data passed from frontend directly
+            for (var i = 0; i < appsData.length; i++) {
+                var app = appsData[i];
+                var appObject = {
+                    displayName: app.name,
+                    id: app.sys_id,
+                    load_demo_data: loadDemoData,
+                    type: 'application',
+                    requested_version: app.latest_version
+                };
+                appsArray.push(appObject);
             }
             
             if (appsArray.length === 0) {
                 return JSON.stringify({
                     success: false,
-                    error: 'No valid apps found to update'
+                    error: 'No apps provided to update'
                 });
             }
             
@@ -107,7 +142,34 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             
             var data = new global.JSON().encode(appsPackages);
             var update = new sn_appclient.AppUpgrader().installBatch(data);
-            var updateObj = JSON.parse(update);
+            
+            // Validate response
+            if (!update) {
+                return JSON.stringify({
+                    success: false,
+                    error: 'AppUpgrader.installBatch() returned null. There may be another batch installation already in progress.'
+                });
+            }
+            
+            var updateObj;
+            try {
+                updateObj = JSON.parse(update);
+            } catch (parseError) {
+                gs.error('StoreAppManager - Failed to parse installBatch response: ' + update);
+                return JSON.stringify({
+                    success: false,
+                    error: 'Failed to parse batch installation response: ' + parseError.message
+                });
+            }
+            
+            // Validate parsed object
+            if (!updateObj || !updateObj.batch_installation_id) {
+                gs.error('StoreAppManager - Invalid installBatch response: ' + update);
+                return JSON.stringify({
+                    success: false,
+                    error: 'Invalid batch installation response. Missing batch_installation_id. Response: ' + update
+                });
+            }
             
             // Add helpful notes to the batch install plan
             var grSBIP = new GlideRecord('sys_batch_install_plan');

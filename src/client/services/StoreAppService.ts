@@ -40,15 +40,32 @@ export class StoreAppService {
     }
 
     /**
+     * Check if there's a batch installation in progress
+     */
+    async checkBatchInProgress(): Promise<BatchInProgressResponse> {
+        return new Promise((resolve, reject) => {
+            const ga = new GlideAjax(this.scriptInclude)
+            ga.addParam('sysparm_name', 'checkBatchInProgress')
+            ga.getXMLAnswer((response: string) => {
+                try {
+                    resolve(JSON.parse(response))
+                } catch (e) {
+                    reject(new Error('Failed to parse batch status response'))
+                }
+            })
+        })
+    }
+
+    /**
      * Update selected apps in batch
-     * @param appIds - Array of sys_store_app sys_ids
+     * @param apps - Array of StoreApp objects to update
      * @param loadDemoData - Whether to load demo data during install
      */
-    async updateSelectedApps(appIds: string[], loadDemoData: boolean): Promise<BatchInstallResponse> {
+    async updateSelectedApps(apps: StoreApp[], loadDemoData: boolean): Promise<BatchInstallResponse> {
         return new Promise((resolve, reject) => {
             const ga = new GlideAjax(this.scriptInclude)
             ga.addParam('sysparm_name', 'updateSelectedApps')
-            ga.addParam('sysparm_app_ids', JSON.stringify(appIds))
+            ga.addParam('sysparm_apps_data', JSON.stringify(apps))
             ga.addParam('sysparm_load_demo_data', loadDemoData.toString())
             ga.getXMLAnswer((response: string) => {
                 try {
