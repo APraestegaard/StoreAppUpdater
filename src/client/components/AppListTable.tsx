@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import { StoreApp } from '../types'
 
 interface AppListTableProps {
@@ -9,14 +9,80 @@ interface AppListTableProps {
 }
 
 export default function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll }: AppListTableProps) {
-    const allSelected = apps.length > 0 && selectedApps.size === apps.length
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(10)
+
+    // Calculate pagination
+    const totalPages = Math.ceil(apps.length / pageSize)
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const paginatedApps = useMemo(() => apps.slice(startIndex, endIndex), [apps, startIndex, endIndex])
+
+    // Check if all visible apps on current page are selected
+    const allSelected = paginatedApps.length > 0 && paginatedApps.every(app => selectedApps.has(app.sys_id))
 
     const handleSelectAllChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        onSelectAll(e.target.checked)
+        if (e.target.checked) {
+            // Select all apps on current page
+            paginatedApps.forEach(app => onSelectApp(app.sys_id, true))
+        } else {
+            // Deselect all apps on current page
+            paginatedApps.forEach(app => onSelectApp(app.sys_id, false))
+        }
     }
 
     const handleSelectChange = (sysId: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
         onSelectApp(sysId, e.target.checked)
+    }
+
+    const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setPageSize(Number(e.target.value))
+        setCurrentPage(1) // Reset to first page when changing page size
+    }
+
+    const handlePreviousPage = () => {
+        setCurrentPage(prev => Math.max(1, prev - 1))
+    }
+
+    const handleNextPage = () => {
+        setCurrentPage(prev => Math.min(totalPages, prev + 1))
+    }
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page)
+    }
+
+    // Generate page numbers to display
+    const getPageNumbers = () => {
+        const pages: (number | string)[] = []
+        const maxVisible = 5
+
+        if (totalPages <= maxVisible) {
+            return Array.from({ length: totalPages }, (_, i) => i + 1)
+        }
+
+        // Always show first page
+        pages.push(1)
+
+        if (currentPage > 3) {
+            pages.push('...')
+        }
+
+        // Show pages around current page
+        for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+            pages.push(i)
+        }
+
+        if (currentPage < totalPages - 2) {
+            pages.push('...')
+        }
+
+        // Always show last page
+        if (totalPages > 1) {
+            pages.push(totalPages)
+        }
+
+        return pages
     }
 
     if (apps.length === 0) {
@@ -32,6 +98,23 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
 
     return (
         <div className="table-container">
+            <div className="table-header">
+                <div className="table-info">
+                    Showing {startIndex + 1}-{Math.min(endIndex, apps.length)} of {apps.length} applications
+                </div>
+                <div className="page-size-selector">
+                    <label htmlFor="pageSize">Show:</label>
+                    <select id="pageSize" value={pageSize} onChange={handlePageSizeChange}>
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span>per page</span>
+                </div>
+            </div>
+
             <table className="sn-table">
                 <thead>
                     <tr>
@@ -40,7 +123,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                                 type="checkbox"
                                 checked={allSelected}
                                 onChange={handleSelectAllChange}
-                                aria-label="Select all apps"
+                                aria-label="Select all apps on this page"
                             />
                         </th>
                         <th>Application Name</th>
@@ -51,7 +134,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                     </tr>
                 </thead>
                 <tbody>
-                    {apps.map((app) => (
+                    {paginatedApps.map((app) => (
                         <tr key={app.sys_id} className={selectedApps.has(app.sys_id) ? 'selected' : ''}>
                             <td className="checkbox-col">
                                 <input
@@ -72,6 +155,48 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                     ))}
                 </tbody>
             </table>
+
+            {totalPages > 1 && (
+                <div className="pagination">
+                    <button
+                        className="pagination-btn"
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                        aria-label="Previous page"
+                    >
+                        ‹ Previous
+                    </button>
+                    
+                    <div className="page-numbers">
+                        {getPageNumbers().map((page, index) => (
+                            typeof page === 'number' ? (
+                                <button
+                                    key={page}
+                                    className={`page-number ${currentPage === page ? 'active' : ''}`}
+                                    onClick={() => handlePageChange(page)}
+                                    aria-label={`Page ${page}`}
+                                    aria-current={currentPage === page ? 'page' : undefined}
+                                >
+                                    {page}
+                                </button>
+                            ) : (
+                                <span key={`ellipsis-${index}`} className="page-ellipsis">
+                                    {page}
+                                </span>
+                            )
+                        ))}
+                    </div>
+
+                    <button
+                        className="pagination-btn"
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                        aria-label="Next page"
+                    >
+                        Next ›
+                    </button>
+                </div>
+            )}
         </div>
     )
 }
