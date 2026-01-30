@@ -335,6 +335,20 @@ body {
 
 .app-name {
     font-weight: 600;
+}
+
+.app-name a {
+    color: #0066b3;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.app-name a:hover {
+    color: #005a9e;
+    text-decoration: underline;
+}
+
+.app-name a:visited {
     color: #0066b3;
 }
 

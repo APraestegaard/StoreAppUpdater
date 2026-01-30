@@ -203,7 +203,16 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                                     aria-label={`Select ${app.name}`}
                                 />
                             </td>
-                            <td className="app-name">{app.name}</td>
+                            <td className="app-name">
+                                <a 
+                                    href={`/now/app-manager/home/app/id/${app.sys_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="View application in App Manager"
+                                >
+                                    {app.name}
+                                </a>
+                            </td>
                             <td className="version">{app.version}</td>
                             <td className="version latest">{app.latest_version}</td>
                             <td className="vendor">{app.vendor}</td>
