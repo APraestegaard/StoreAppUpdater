@@ -227,6 +227,9 @@ export default function App() {
                 <div className="header-content">
                     <h1>Store App Update Manager</h1>
                     <p className="subtitle">Manage and update ServiceNow store applications</p>
+                    <p className="author-credit">
+                        Created by <a href="https://www.linkedin.com/in/danielaagrenmadsen/da/" target="_blank" rel="noopener noreferrer">Daniel Aagren Seehartrai Madsen</a> • ServiceNow Rising Star 2025
+                    </p>
                 </div>
             </header>
 

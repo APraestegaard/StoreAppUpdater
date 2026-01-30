@@ -37,6 +37,24 @@ body {
     color: #5a6c72;
 }
 
+.author-credit {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: #8b9da3;
+    font-style: italic;
+}
+
+.author-credit a {
+    color: #0066b3;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.author-credit a:hover {
+    color: #005a9e;
+    text-decoration: underline;
+}
+
 /* Main Content */
 .app-content {
     padding: 24px;
