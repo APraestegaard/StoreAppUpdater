@@ -21,6 +21,7 @@ export default function App() {
         batchName?: string
         state?: string
         link?: string
+        batchId?: string
     } | null>(null)
 
     const service = useMemo(() => new StoreAppService(), [])
@@ -48,14 +49,18 @@ export default function App() {
     const checkForBatchInProgress = async () => {
         try {
             const status = await service.checkBatchInProgress()
+            console.log('Batch status check result:', status)
             if (status.inProgress) {
+                console.log('Setting batch in progress with batchId:', status.batchId)
                 setBatchInProgress({
                     inProgress: true,
                     batchName: status.batchName,
                     state: status.state,
-                    link: status.link
+                    link: status.link,
+                    batchId: status.batchId
                 })
             } else {
+                console.log('No batch in progress')
                 setBatchInProgress(null)
             }
         } catch (err) {
@@ -104,15 +109,19 @@ export default function App() {
 
             // Get full app objects for selected apps
             const selectedAppObjects = apps.filter((app) => selectedApps.has(app.sys_id))
+            console.log('Calling updateSelectedApps with:', selectedAppObjects)
             const result = await service.updateSelectedApps(selectedAppObjects, false)
+            console.log('Update result:', result)
 
             if (result.success) {
+                console.log('Setting batchId to:', result.batch_installation_id)
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
                 setSuccess(
                     `Update batch created successfully! ${selectedApps.size} application(s) will be updated. Check progress below.`
                 )
             } else {
+                console.error('Update failed:', result.error)
                 setError(result.error || 'Failed to start update process')
                 setIsUpdating(false)
             }
@@ -196,13 +205,15 @@ export default function App() {
     }
 
     const handleProgressComplete = () => {
+        console.log('Progress complete callback called')
         setIsUpdating(false)
-        setBatchId(null)
-        setExecutionTrackerId(null)
         setSuccess('Installation completed! Refreshing application list...')
+        // Keep the progress tracker visible for 3 more seconds before clearing
         setTimeout(() => {
+            setBatchId(null)
+            setExecutionTrackerId(null)
             void loadApps()
-        }, 2000)
+        }, 3000)
     }
 
     const dismissMessage = () => {
@@ -219,16 +230,27 @@ export default function App() {
                 </div>
             </header>
 
-            <main className="app-content">                {batchInProgress?.inProgress && (
+            <main className="app-content">
+                {/* Debug info */}
+                {console.log('Render - batchId:', batchId, 'batchInProgress:', batchInProgress)}
+                
+                {batchInProgress?.inProgress && (
                     <div className="info-message">
                         <strong>ℹ️ Batch Installation In Progress:</strong> "{batchInProgress.batchName}" is currently {batchInProgress.state}. 
-                        New updates are disabled until it completes. {batchInProgress.link && (
-                            <a href={batchInProgress.link} target="_blank" rel="noopener noreferrer" style={{color: '#0073e6', textDecoration: 'underline'}}>
-                                View Status
-                            </a>
-                        )}
+                        New updates are disabled until it completes.
                     </div>
-                )}                {error && (
+                )}
+
+                {(batchId || batchInProgress?.batchId) && (
+                    <ProgressTracker 
+                        batchId={batchId || batchInProgress?.batchId || null} 
+                        executionTrackerId={executionTrackerId} 
+                        mode={batchId ? 'user-initiated' : 'detected'}
+                        onComplete={handleProgressComplete} 
+                    />
+                )}
+
+                {error && (
                     <div className="message error">
                         <span className="message-icon">⚠</span>
                         <span className="message-text">{error}</span>
@@ -247,8 +269,6 @@ export default function App() {
                         </button>
                     </div>
                 )}
-
-                {batchId && <ProgressTracker batchId={batchId} executionTrackerId={executionTrackerId} onComplete={handleProgressComplete} />}
 
                 <ActionBar
                     appsCount={apps.length}

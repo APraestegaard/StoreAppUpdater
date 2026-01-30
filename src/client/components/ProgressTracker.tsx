@@ -5,10 +5,11 @@ import { StoreAppService } from '../services/StoreAppService'
 interface ProgressTrackerProps {
     batchId: string | null
     executionTrackerId: string | null
+    mode: 'user-initiated' | 'detected'
     onComplete: () => void
 }
 
-export default function ProgressTracker({ batchId, executionTrackerId, onComplete }: ProgressTrackerProps) {
+export default function ProgressTracker({ batchId, executionTrackerId, mode, onComplete }: ProgressTrackerProps) {
     const [status, setStatus] = useState<BatchStatusResponse | null>(null)
     const service = new StoreAppService()
 
@@ -21,10 +22,14 @@ export default function ProgressTracker({ batchId, executionTrackerId, onComplet
         const pollStatus = async () => {
             try {
                 const result = await service.getBatchStatus(batchId)
+                console.log('ProgressTracker - Poll result:', result)
                 setStatus(result)
 
-                // Check if installation is complete
-                if (result.state === 'installed' || result.state === 'error') {
+                // Only call onComplete for user-initiated batches
+                // Detected batches should not trigger auto-refresh
+                // Terminal states: installed, error, invalid, partial_install
+                if (mode === 'user-initiated' && (result.state === 'installed' || result.state === 'error' || result.state === 'invalid' || result.state === 'partial_install')) {
+                    console.log('ProgressTracker - Batch completed with state:', result.state, ', calling onComplete in 2 seconds')
                     setTimeout(() => {
                         onComplete()
                     }, 2000)
@@ -55,6 +60,10 @@ export default function ProgressTracker({ batchId, executionTrackerId, onComplet
                 return 'Completed'
             case 'error':
                 return 'Error'
+            case 'invalid':
+                return 'Invalid'
+            case 'partial_install':
+                return 'Partially Installed'
             default:
                 return state
         }
@@ -65,7 +74,10 @@ export default function ProgressTracker({ batchId, executionTrackerId, onComplet
             case 'installed':
                 return 'success'
             case 'error':
+            case 'invalid':
                 return 'error'
+            case 'partial_install':
+                return 'warning'
             case 'in_progress':
                 return 'progress'
             default:
@@ -76,9 +88,31 @@ export default function ProgressTracker({ batchId, executionTrackerId, onComplet
     return (
         <div className={`progress-tracker ${getStateClass(status.state)}`}>
             <div className="progress-header">
-                <h3>Installation Progress</h3>
+                <h3>
+                    {mode === 'detected' ? '🔍 ' : ''}Installation Progress
+                    {mode === 'detected' && <span className="detected-badge">(Detected)</span>}
+                </h3>
                 <span className={`state-badge ${getStateClass(status.state)}`}>{getStateDisplay(status.state)}</span>
             </div>
+
+            {mode === 'detected' && status.state === 'installed' && (
+                <div className="completion-notice">
+                    <span className="message-icon">✓</span>
+                    <span>Batch installation completed. Refresh the page to see updated applications.</span>
+                </div>
+            )}
+
+            {status.state === 'invalid' && (
+                <div className="error-details">
+                    <strong>⚠️ Installation Invalid:</strong> The batch did not install as expected. Please try again or check the batch installation plan for details.
+                </div>
+            )}
+
+            {status.state === 'partial_install' && (
+                <div className="warning-details">
+                    <strong>⚠️ Partial Installation:</strong> Some applications were installed successfully, but others failed. Check the batch installation plan for details on which applications need to be retried.
+                </div>
+            )}
 
             <div className="progress-details">
                 <div className="progress-bar-container">

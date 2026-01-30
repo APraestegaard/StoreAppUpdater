@@ -342,6 +342,10 @@ body {
     border-left: 4px solid #c9252d;
 }
 
+.progress-tracker.warning {
+    border-left: 4px solid #ff9800;
+}
+
 .progress-tracker.progress {
     border-left: 4px solid #0066b3;
 }
@@ -358,6 +362,34 @@ body {
     font-size: 16px;
     font-weight: 600;
     color: #293e40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.detected-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: #5a6c72;
+    background-color: #f6f6f6;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.completion-notice {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 12px;
+    background-color: #e8f5e9;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #2c8548;
+}
+
+.completion-notice .message-icon {
+    font-size: 16px;
+    margin-right: 8px;
 }
 
 .state-badge {
@@ -375,6 +407,11 @@ body {
 .state-badge.error {
     background-color: #ffebee;
     color: #c9252d;
+}
+
+.state-badge.warning {
+    background-color: #fff3e0;
+    color: #ff9800;
 }
 
 .state-badge.progress {
@@ -418,6 +455,15 @@ body {
     margin-bottom: 12px;
     font-size: 13px;
     color: #c9252d;
+}
+
+.warning-details {
+    padding: 12px;
+    background-color: #fff3e0;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #ff9800;
 }
 
 .progress-links {

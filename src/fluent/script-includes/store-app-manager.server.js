@@ -208,24 +208,44 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
         try {
             var grSBIP = new GlideRecord('sys_batch_install_plan');
             if (grSBIP.get(batchId)) {
-                var grApps = new GlideRecord('sys_batch_install_plan_app');
-                grApps.addQuery('batch_install_plan', batchId);
-                grApps.query();
+                var state = grSBIP.getValue('state');
+                var errorMessage = grSBIP.getValue('error_message');
                 
-                var totalApps = grApps.getRowCount();
+                // Query sys_batch_install_item for all items in this batch
+                var grItems = new GlideRecord('sys_batch_install_item');
+                grItems.addQuery('batch_install_plan', batchId);
+                grItems.query();
+                var totalApps = grItems.getRowCount();
                 
-                grApps.addQuery('state', 'installed');
-                grApps.query();
-                var completedApps = grApps.getRowCount();
+                // Count installed items
+                var grInstalled = new GlideRecord('sys_batch_install_item');
+                grInstalled.addQuery('batch_install_plan', batchId);
+                grInstalled.addQuery('state', 'installed');
+                grInstalled.query();
+                var completedApps = grInstalled.getRowCount();
                 
-                var progress = totalApps > 0 ? Math.round((completedApps / totalApps) * 100) : 0;
+                // Calculate progress
+                var progress = 0;
+                if (totalApps > 0) {
+                    progress = Math.round((completedApps / totalApps) * 100);
+                }
+                
+                // If state is installed but progress isn't 100, set it to 100
+                if (state === 'installed' && progress < 100) {
+                    progress = 100;
+                    completedApps = totalApps;
+                }
+                
+                gs.info('StoreAppManager - getBatchStatus: Batch ' + batchId + 
+                       ' - State: ' + state + 
+                       ', Progress: ' + progress + '% (' + completedApps + '/' + totalApps + ')');
                 
                 return JSON.stringify({
-                    state: grSBIP.getValue('state'),
+                    state: state,
                     progress: progress,
                     total_apps: totalApps,
                     completed_apps: completedApps,
-                    error_message: grSBIP.getValue('error_message')
+                    error_message: errorMessage
                 });
             }
             

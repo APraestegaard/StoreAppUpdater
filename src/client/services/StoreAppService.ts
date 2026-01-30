@@ -1,4 +1,4 @@
-import { StoreApp, BatchInstallResponse, BatchStatusResponse, UpdateCheckResponse } from '../types'
+import { StoreApp, BatchInstallResponse, BatchStatusResponse, UpdateCheckResponse, BatchInProgressResponse } from '../types'
 
 export class StoreAppService {
     private scriptInclude = 'x_1118332_store_ap.StoreAppManager'
