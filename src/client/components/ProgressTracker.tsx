@@ -52,6 +52,8 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
 
     const getStateDisplay = (state: string): string => {
         switch (state) {
+            case 'ready':
+                return 'Preparing'
             case 'pending':
                 return 'Pending'
             case 'in_progress':
@@ -79,6 +81,8 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             case 'partial_install':
                 return 'warning'
             case 'in_progress':
+                return 'progress'
+            case 'ready':
                 return 'progress'
             default:
                 return 'pending'
@@ -115,14 +119,25 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             )}
 
             <div className="progress-details">
-                <div className="progress-bar-container">
-                    <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${status.progress}%` }}></div>
+                {status.state === 'ready' ? (
+                    <div className="preparing-message">
+                        <div className="loading-spinner">⏳</div>
+                        <span className="preparing-text">
+                            {status.total_apps > 0 
+                                ? `Preparing batch installation... (${status.total_apps} application${status.total_apps !== 1 ? 's' : ''} loaded)`
+                                : 'Preparing batch installation...'}
+                        </span>
                     </div>
-                    <span className="progress-text">
-                        {status.completed_apps} of {status.total_apps} apps completed ({status.progress}%)
-                    </span>
-                </div>
+                ) : (
+                    <div className="progress-bar-container">
+                        <div className="progress-bar">
+                            <div className="progress-fill" style={{ width: `${status.progress}%` }}></div>
+                        </div>
+                        <span className="progress-text">
+                            {status.completed_apps} of {status.total_apps} apps completed ({status.progress}%)
+                        </span>
+                    </div>
+                )}
 
                 {status.error_message && (
                     <div className="error-details">
