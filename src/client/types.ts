@@ -3,6 +3,7 @@ export interface StoreApp {
     name: string
     version: string
     latest_version: string
+    update_type: 'Major' | 'Minor' | 'Patch'
     vendor: string
     install_date: string
     needs_update: boolean
@@ -20,6 +21,8 @@ export interface BatchStatusResponse {
     progress: number
     total_apps: number
     completed_apps: number
+    current_app_name?: string | null
+    current_app_display?: string | null
     error_message?: string
 }
 
@@ -36,4 +39,14 @@ export interface BatchInProgressResponse {
     createdOn?: string
     link?: string
     error?: string
+}
+
+export interface BatchHistory {
+    sys_id: string
+    name: string
+    state: string
+    sys_created_on: string
+    sys_updated_on: string
+    notes?: string
+    error_message?: string
 }

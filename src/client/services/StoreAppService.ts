@@ -99,6 +99,24 @@ export class StoreAppService {
     }
 
     /**
+     * Get batch installation history
+     */
+    async getBatchHistory(): Promise<import('../types').BatchHistory[]> {
+        return new Promise((resolve, reject) => {
+            const ga = new GlideAjax(this.scriptInclude)
+            ga.addParam('sysparm_name', 'getBatchHistory')
+            ga.getXMLAnswer((response: string) => {
+                try {
+                    const result = JSON.parse(response)
+                    resolve(result)
+                } catch (e) {
+                    reject(new Error('Failed to get batch history'))
+                }
+            })
+        })
+    }
+
+    /**
      * Get URL to sys_batch_install_plan record
      */
     getBatchInstallUrl(batchId: string): string {

@@ -136,6 +136,12 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
                         <span className="progress-text">
                             {status.completed_apps} of {status.total_apps} apps completed ({status.progress}%)
                         </span>
+                        {status.current_app_display && status.state === 'in_progress' && (
+                            <div className="current-app-info">
+                                <div className="loading-spinner small"></div>
+                                <span>Currently updating: <strong>{status.current_app_display}</strong></span>
+                            </div>
+                        )}
                     </div>
                 )}
 

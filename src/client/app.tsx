@@ -4,6 +4,8 @@ import { StoreAppService } from './services/StoreAppService'
 import AppListTable from './components/AppListTable'
 import ActionBar from './components/ActionBar'
 import ProgressTracker from './components/ProgressTracker'
+import ConfirmationModal from './components/ConfirmationModal'
+import BatchHistory from './components/BatchHistory'
 import './app.css'
 
 export default function App() {
@@ -16,6 +18,8 @@ export default function App() {
     const [success, setSuccess] = useState<string | null>(null)
     const [batchId, setBatchId] = useState<string | null>(null)
     const [executionTrackerId, setExecutionTrackerId] = useState<string | null>(null)
+    const [showConfirmModal, setShowConfirmModal] = useState(false)
+    const [pendingUpdateApps, setPendingUpdateApps] = useState<StoreApp[]>([])
     const [batchInProgress, setBatchInProgress] = useState<{
         inProgress: boolean
         batchName?: string
@@ -98,19 +102,22 @@ export default function App() {
             return
         }
 
-        if (!confirm(`Are you sure you want to update ${selectedApps.size} application(s)?`)) {
-            return
-        }
+        // Get full app objects for selected apps and show confirmation modal
+        const selectedAppObjects = apps.filter((app) => selectedApps.has(app.sys_id))
+        setPendingUpdateApps(selectedAppObjects)
+        setShowConfirmModal(true)
+    }
 
+    const handleConfirmUpdate = async () => {
+        setShowConfirmModal(false)
+        
         try {
             setIsUpdating(true)
             setError(null)
             setSuccess(null)
 
-            // Get full app objects for selected apps
-            const selectedAppObjects = apps.filter((app) => selectedApps.has(app.sys_id))
-            console.log('Calling updateSelectedApps with:', selectedAppObjects)
-            const result = await service.updateSelectedApps(selectedAppObjects, false)
+            console.log('Calling updateSelectedApps with:', pendingUpdateApps)
+            const result = await service.updateSelectedApps(pendingUpdateApps, false)
             console.log('Update result:', result)
 
             if (result.success) {
@@ -118,8 +125,9 @@ export default function App() {
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
                 setSuccess(
-                    `Update batch created successfully! ${selectedApps.size} application(s) will be updated. Check progress above.`
+                    `Update batch created successfully! ${pendingUpdateApps.length} application(s) will be updated. Check progress above.`
                 )
+                setPendingUpdateApps([])
             } else {
                 console.error('Update failed:', result.error)
                 setError(result.error || 'Failed to start update process')
@@ -132,43 +140,15 @@ export default function App() {
         }
     }
 
+    const handleCancelUpdate = () => {
+        setShowConfirmModal(false)
+        setPendingUpdateApps([])
+    }
+
     const handleUpdateAll = async () => {
-        if (apps.length === 0) return
-
-        // Check for in-progress batch
-        await checkForBatchInProgress()
-        if (batchInProgress?.inProgress) {
-            setError(`Cannot start new update: Batch installation "${batchInProgress.batchName}" is currently ${batchInProgress.state}. Please wait for it to complete.`)
-            return
-        }
-
-        if (!confirm(`Are you sure you want to update all ${apps.length} application(s)?`)) {
-            return
-        }
-
-        try {
-            setIsUpdating(true)
-            setError(null)
-            setSuccess(null)
-
-            // Pass all app objects for bulk update
-            const result = await service.updateSelectedApps(apps, false)
-
-            if (result.success) {
-                setBatchId(result.batch_installation_id)
-                setExecutionTrackerId(result.execution_tracker_id)
-                setSuccess(
-                    `Update batch created successfully! All ${apps.length} application(s) will be updated. Check progress above.`
-                )
-            } else {
-                setError(result.error || 'Failed to start update process')
-                setIsUpdating(false)
-            }
-        } catch (err) {
-            setError('Failed to update applications. Please try again.')
-            console.error(err)
-            setIsUpdating(false)
-        }
+        // Show confirmation modal with all apps
+        setPendingUpdateApps(apps)
+        setShowConfirmModal(true)
     }
 
     const handleCheckUpdates = async () => {
@@ -234,6 +214,14 @@ export default function App() {
             </header>
 
             <main className="app-content">
+                {/* Confirmation Modal */}
+                <ConfirmationModal
+                    apps={pendingUpdateApps}
+                    onConfirm={handleConfirmUpdate}
+                    onCancel={handleCancelUpdate}
+                    isVisible={showConfirmModal}
+                />
+                
                 {/* Debug info */}
                 {console.log('Render - batchId:', batchId, 'batchInProgress:', batchInProgress)}
                 
@@ -290,12 +278,16 @@ export default function App() {
                         <p>Loading applications...</p>
                     </div>
                 ) : (
-                    <AppListTable
-                        apps={apps}
-                        selectedApps={selectedApps}
-                        onSelectApp={handleSelectApp}
-                        onSelectAll={handleSelectAll}
-                    />
+                    <>
+                        <AppListTable
+                            apps={apps}
+                            selectedApps={selectedApps}
+                            onSelectApp={handleSelectApp}
+                            onSelectAll={handleSelectAll}
+                        />
+                        
+                        <BatchHistory />
+                    </>
                 )}
             </main>
         </div>

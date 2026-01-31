@@ -13,6 +13,32 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
     const [pageSize, setPageSize] = useState(10)
     const [searchQuery, setSearchQuery] = useState('')
 
+    const getUpdateTypeColor = (updateType: string) => {
+        switch (updateType) {
+            case 'Major':
+                return 'update-major'
+            case 'Minor':
+                return 'update-minor'
+            case 'Patch':
+                return 'update-patch'
+            default:
+                return 'update-unknown'
+        }
+    }
+
+    const getUpdateTypeLabel = (updateType: string) => {
+        switch (updateType) {
+            case 'Major':
+                return 'Major Update'
+            case 'Minor':
+                return 'Minor Update'
+            case 'Patch':
+                return 'Patch Update'
+            default:
+                return 'Update Available'
+        }
+    }
+
     // Filter apps based on search query
     const filteredApps = useMemo(() => {
         if (!searchQuery.trim()) {
@@ -217,7 +243,9 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                             <td className="version latest">{app.latest_version}</td>
                             <td className="vendor">{app.vendor}</td>
                             <td className="status">
-                                <span className="status-badge update-available">Update Available</span>
+                                <span className={`status-badge ${getUpdateTypeColor(app.update_type)}`}>
+                                    {getUpdateTypeLabel(app.update_type)}
+                                </span>
                             </td>
                         </tr>
                     ))}
