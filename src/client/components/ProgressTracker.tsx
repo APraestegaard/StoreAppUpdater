@@ -22,20 +22,18 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
         const pollStatus = async () => {
             try {
                 const result = await service.getBatchStatus(batchId)
-                console.log('ProgressTracker - Poll result:', result)
                 setStatus(result)
 
                 // Only call onComplete for user-initiated batches
                 // Detected batches should not trigger auto-refresh
                 // Terminal states: installed, error, invalid, partial_install
                 if (mode === 'user-initiated' && (result.state === 'installed' || result.state === 'error' || result.state === 'invalid' || result.state === 'partial_install')) {
-                    console.log('ProgressTracker - Batch completed with state:', result.state, ', calling onComplete in 2 seconds')
                     setTimeout(() => {
                         onComplete()
                     }, 2000)
                 }
             } catch (error) {
-                console.error('Failed to get batch status:', error)
+                // Status polling error handled silently - will retry on next interval
             }
         }
 

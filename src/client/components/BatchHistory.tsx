@@ -21,7 +21,6 @@ export default function BatchHistory() {
             setHistory(data)
         } catch (err) {
             setError('Failed to load batch history')
-            console.error(err)
         } finally {
             setLoading(false)
         }

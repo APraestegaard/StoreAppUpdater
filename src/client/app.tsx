@@ -39,7 +39,6 @@ export default function App() {
             setSelectedApps(new Set()) // Clear selections on refresh
         } catch (err) {
             setError('Failed to load applications. Please try again.')
-            console.error(err)
         } finally {
             setLoading(false)
         }
@@ -53,9 +52,7 @@ export default function App() {
     const checkForBatchInProgress = async () => {
         try {
             const status = await service.checkBatchInProgress()
-            console.log('Batch status check result:', status)
             if (status.inProgress) {
-                console.log('Setting batch in progress with batchId:', status.batchId)
                 setBatchInProgress({
                     inProgress: true,
                     batchName: status.batchName,
@@ -64,11 +61,10 @@ export default function App() {
                     batchId: status.batchId
                 })
             } else {
-                console.log('No batch in progress')
                 setBatchInProgress(null)
             }
         } catch (err) {
-            console.error('Failed to check batch status:', err)
+            // Error handled silently - batch status is non-critical
         }
     }
 
@@ -116,12 +112,9 @@ export default function App() {
             setError(null)
             setSuccess(null)
 
-            console.log('Calling updateSelectedApps with:', pendingUpdateApps)
             const result = await service.updateSelectedApps(pendingUpdateApps, false)
-            console.log('Update result:', result)
 
             if (result.success) {
-                console.log('Setting batchId to:', result.batch_installation_id)
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
                 setSuccess(
@@ -129,13 +122,11 @@ export default function App() {
                 )
                 setPendingUpdateApps([])
             } else {
-                console.error('Update failed:', result.error)
                 setError(result.error || 'Failed to start update process')
                 setIsUpdating(false)
             }
         } catch (err) {
             setError('Failed to update applications. Please try again.')
-            console.error(err)
             setIsUpdating(false)
         }
     }
@@ -178,14 +169,12 @@ export default function App() {
             }
         } catch (err) {
             setError('Failed to check for updates. Please try again.')
-            console.error(err)
         } finally {
             setIsCheckingUpdates(false)
         }
     }
 
     const handleProgressComplete = () => {
-        console.log('Progress complete callback called')
         setIsUpdating(false)
         setSuccess('Installation completed! Refreshing application list...')
         // Keep the progress tracker visible for 3 more seconds before clearing
@@ -221,9 +210,6 @@ export default function App() {
                     onCancel={handleCancelUpdate}
                     isVisible={showConfirmModal}
                 />
-                
-                {/* Debug info */}
-                {console.log('Render - batchId:', batchId, 'batchInProgress:', batchInProgress)}
                 
                 {batchInProgress?.inProgress && (
                     <div className="info-message">
