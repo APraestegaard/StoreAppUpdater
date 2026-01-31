@@ -2,6 +2,23 @@
 var StoreAppManager = Class.create();
 StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     
+    // Constants for batch install plan states
+    BATCH_STATES: {
+        PENDING: 'pending',
+        IN_PROGRESS: 'in_progress',
+        INSTALLED: 'installed',
+        ERROR: 'error',
+        NOT_FOUND: 'not_found'
+    },
+    
+    // Constants for batch install item states
+    ITEM_STATES: {
+        INSTALLED: 'installed'
+    },
+    
+    // Required role for privileged operations
+    REQUIRED_ROLE: 'admin',
+    
     /**
      * Check if there's a batch installation currently in progress
      * Returns JSON with status information
@@ -9,7 +26,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     checkBatchInProgress: function() {
         try {
             var grBatch = new GlideRecord('sys_batch_install_plan');
-            grBatch.addQuery('state', 'IN', 'pending,in_progress');
+            grBatch.addQuery('state', 'IN', this.BATCH_STATES.PENDING + ',' + this.BATCH_STATES.IN_PROGRESS);
             grBatch.orderByDesc('sys_created_on');
             grBatch.setLimit(1);
             grBatch.query();
@@ -43,44 +60,91 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
      * Returns JSON array of apps with version information
      */
     getAppsNeedingUpdate: function() {
-        var appsArray = [];
-        var prevName = '';
-        
-        var grSSA = new GlideRecord('sys_store_app');
-        grSSA.addEncodedQuery('install_dateISNOTEMPTY^hide_on_ui=false^vendor=ServiceNow^ORvendorISEMPTY');
-        grSSA.orderBy('name');
-        grSSA.orderBy('version');
-        grSSA.query();
-        
-        while (grSSA.next()) {
-            var curName = grSSA.getValue('name');
+        try {
+            var result = [];
+            var seenApps = {};
+            var buildName = gs.getProperty('glide.buildname', '');
             
-            // Skip duplicates (same app, different versions installed)
-            if (curName == prevName) {
-                continue;
+            if (!buildName) {
+                gs.warn('StoreAppManager - glide.buildname property is empty. Compatibility filtering may be unreliable.');
             }
             
-            var installedVersion = grSSA.getValue('version');
-            var latestVersion = grSSA.getValue('latest_version');
+            var appQuery = new GlideRecord('sys_store_app');
+            appQuery.addQuery('install_date', '!=', '');
+            appQuery.addQuery('hide_on_ui', false);
             
-            if (this._updateAvailable(installedVersion, latestVersion)) {
-                prevName = curName;
+            // Build OR condition for vendor field
+            var vendorFilter = appQuery.addQuery('vendor', 'ServiceNow');
+            vendorFilter.addOrCondition('vendor', '');
+            
+            appQuery.orderBy('name');
+            appQuery.orderBy('version');
+            appQuery.query();
+            
+            // Process query results
+            while (appQuery.next()) {
+                var appTitle = appQuery.getValue('name');
                 
-                var appObject = {
-                    sys_id: grSSA.getUniqueValue(),
-                    name: curName,
-                    version: installedVersion,
-                    latest_version: latestVersion,
-                    vendor: grSSA.getValue('vendor') || 'ServiceNow',
-                    install_date: grSSA.getValue('install_date'),
-                    needs_update: true
-                };
+                // Skip if already processed
+                if (seenApps.hasOwnProperty(appTitle)) {
+                    continue;
+                }
                 
-                appsArray.push(appObject);
+                var installedVer = appQuery.getValue('version');
+                var storeSysId = appQuery.getUniqueValue();
+                
+                // Query sys_app_version for compatible versions
+                var versionQuery = new GlideRecord('sys_app_version');
+                versionQuery.addQuery('source_app_id', storeSysId);
+                if (buildName) {
+                    versionQuery.addQuery('compatibilities', 'LIKE', buildName);
+                }
+                versionQuery.addQuery('version', '!=', installedVer);
+                versionQuery.orderByDesc('version');
+                versionQuery.query();
+                
+                // Find the highest compatible version greater than installed
+                var bestVersion = installedVer;
+                var foundHigher = false;
+                
+                while (versionQuery.next()) {
+                    var candidate = versionQuery.getValue('version');
+                    if (this._versionCompare(candidate, bestVersion) === 1) {
+                        bestVersion = candidate;
+                        foundHigher = true;
+                        // Could break here for performance, but continue to find absolute highest
+                    }
+                }
+                
+                // If no compatible version found in sys_app_version, fallback to latest_version
+                if (!foundHigher) {
+                    var latestVer = appQuery.getValue('latest_version');
+                    if (latestVer && this._versionCompare(latestVer, installedVer) === 1) {
+                        bestVersion = latestVer;
+                        foundHigher = true;
+                    }
+                }
+                
+                if (foundHigher) {
+                    // Mark as processed and build result object
+                    seenApps[appTitle] = true;
+                    result.push({
+                        sys_id: storeSysId,
+                        name: appTitle,
+                        version: installedVer,
+                        latest_version: bestVersion,
+                        vendor: appQuery.getValue('vendor') || 'ServiceNow',
+                        install_date: appQuery.getValue('install_date'),
+                        needs_update: true
+                    });
+                }
             }
+            
+            return JSON.stringify(result);
+        } catch (e) {
+            gs.error('StoreAppManager - getAppsNeedingUpdate error: ' + e.message);
+            return JSON.stringify([]);
         }
-        
-        return JSON.stringify(appsArray);
     },
     
     /**
@@ -108,92 +172,112 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
      * @param loadDemoData - boolean, whether to load demo data
      */
     updateSelectedApps: function() {
-        var appsDataJson = this.getParameter('sysparm_apps_data');
-        var loadDemoData = this.getParameter('sysparm_load_demo_data') === 'true';
+        // Role check for privileged operation
+        if (!gs.hasRole(this.REQUIRED_ROLE)) {
+            gs.warn('StoreAppManager - updateSelectedApps: Access denied for user ' + gs.getUserName());
+            return JSON.stringify({ 
+                success: false, 
+                error: 'Insufficient privileges. Admin role required.' 
+            });
+        }
+        
+        var appsJson = this.getParameter('sysparm_apps_data');
+        var withDemoData = this.getParameter('sysparm_load_demo_data') === 'true';
         
         try {
-            var appsData = JSON.parse(appsDataJson);
-            var appsArray = [];
-            
-            // Use the app data passed from frontend directly
-            for (var i = 0; i < appsData.length; i++) {
-                var app = appsData[i];
-                var appObject = {
-                    displayName: app.name,
-                    id: app.sys_id,
-                    load_demo_data: loadDemoData,
-                    type: 'application',
-                    requested_version: app.latest_version
-                };
-                appsArray.push(appObject);
+            // Input validation
+            if (!appsJson || appsJson.trim() === '') {
+                return JSON.stringify({ success: false, error: 'No apps data provided' });
             }
             
-            if (appsArray.length === 0) {
-                return JSON.stringify({
-                    success: false,
-                    error: 'No apps provided to update'
+            var appsToUpdate = JSON.parse(appsJson);
+            
+            // Type and length validation
+            if (!Array.isArray(appsToUpdate)) {
+                return JSON.stringify({ success: false, error: 'Invalid apps data format. Expected an array.' });
+            }
+            
+            if (appsToUpdate.length === 0) {
+                return JSON.stringify({ success: false, error: 'No apps provided to update' });
+            }
+            
+            // Build package list for batch upgrade (AppUpgrader format)
+            var packages = [];
+            
+            for (var i = 0; i < appsToUpdate.length; i++) {
+                var app = appsToUpdate[i];
+                packages.push({
+                    displayName: app.name,
+                    id: app.sys_id,
+                    load_demo_data: withDemoData,
+                    type: 'application',
+                    requested_version: app.latest_version
                 });
             }
             
-            var appsPackages = {
-                packages: appsArray,
+            // Prepare batch request payload
+            var batchPayload = new global.JSON().encode({
+                packages: packages,
                 name: 'Store App Updates'
-            };
+            });
             
-            var data = new global.JSON().encode(appsPackages);
-            var update = new sn_appclient.AppUpgrader().installBatch(data);
+            // Execute batch upgrade using AppUpgrader (designed for updates)
+            var upgradeResponse = new sn_appclient.AppUpgrader().installBatch(batchPayload);
             
-            // Validate response
-            if (!update) {
+            if (!upgradeResponse) {
                 return JSON.stringify({
                     success: false,
                     error: 'AppUpgrader.installBatch() returned null. There may be another batch installation already in progress.'
                 });
             }
             
-            var updateObj;
+            // Parse and validate response
+            var responseData;
             try {
-                updateObj = JSON.parse(update);
-            } catch (parseError) {
-                gs.error('StoreAppManager - Failed to parse installBatch response: ' + update);
+                responseData = JSON.parse(upgradeResponse);
+            } catch (err) {
+                gs.error('StoreAppManager - Failed to parse installBatch response: ' + upgradeResponse);
                 return JSON.stringify({
                     success: false,
-                    error: 'Failed to parse batch installation response: ' + parseError.message
+                    error: 'Failed to parse batch installation response: ' + err.message
                 });
             }
             
-            // Validate parsed object
-            if (!updateObj || !updateObj.batch_installation_id) {
-                gs.error('StoreAppManager - Invalid installBatch response: ' + update);
+            // Check for required fields
+            var batchId = responseData && responseData.batch_installation_id;
+            if (!batchId) {
+                gs.error('StoreAppManager - Invalid installBatch response: ' + upgradeResponse);
                 return JSON.stringify({
                     success: false,
-                    error: 'Invalid batch installation response. Missing batch_installation_id. Response: ' + update
+                    error: 'Invalid batch installation response. Missing batch_installation_id. Response: ' + upgradeResponse
                 });
             }
             
-            // Add helpful notes to the batch install plan
-            var grSBIP = new GlideRecord('sys_batch_install_plan');
-            if (grSBIP.get(updateObj.batch_installation_id)) {
-                grSBIP.setValue('notes', 
-                    'It may take some time for the apps to all populate in the related list below. ' +
-                    'You can refresh the list as needed to see them populating.\n\n' +
-                    'After all apps have populated, the install will start and the State will change to In progress.\n\n' +
+            // Update batch plan notes
+            var planRecord = new GlideRecord('sys_batch_install_plan');
+            if (planRecord.get(batchId)) {
+                planRecord.setValue('notes', [
+                    'It may take some time for the apps to all populate in the related list below.',
+                    'You can refresh the list as needed to see them populating.',
+                    '',
+                    'After all apps have populated, the install will start and the State will change to In progress.',
+                    '',
                     'When the batch is done, the state will update to Installed.'
-                );
-                grSBIP.update();
+                ].join('\n'));
+                planRecord.update();
             }
             
             return JSON.stringify({
                 success: true,
-                batch_installation_id: updateObj.batch_installation_id,
-                execution_tracker_id: updateObj.execution_tracker_id
+                batch_installation_id: batchId,
+                execution_tracker_id: responseData.execution_tracker_id
             });
             
-        } catch (e) {
-            gs.error('StoreAppManager - updateSelectedApps error: ' + e.message);
+        } catch (ex) {
+            gs.error('StoreAppManager - updateSelectedApps error: ' + ex.message);
             return JSON.stringify({
                 success: false,
-                error: 'Error updating apps: ' + e.message
+                error: 'Error updating apps: ' + ex.message
             });
         }
     },
@@ -203,97 +287,189 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
      * @param batchId - sys_batch_install_plan sys_id
      */
     getBatchStatus: function() {
-        var batchId = this.getParameter('sysparm_batch_id');
+        var batchSysId = this.getParameter('sysparm_batch_id');
         
-        try {
-            var grSBIP = new GlideRecord('sys_batch_install_plan');
-            if (grSBIP.get(batchId)) {
-                var state = grSBIP.getValue('state');
-                var errorMessage = grSBIP.getValue('error_message');
-                
-                // Query sys_batch_install_item for all items in this batch
-                var grItems = new GlideRecord('sys_batch_install_item');
-                grItems.addQuery('batch_install_plan', batchId);
-                grItems.query();
-                var totalApps = grItems.getRowCount();
-                
-                // Count installed items
-                var grInstalled = new GlideRecord('sys_batch_install_item');
-                grInstalled.addQuery('batch_install_plan', batchId);
-                grInstalled.addQuery('state', 'installed');
-                grInstalled.query();
-                var completedApps = grInstalled.getRowCount();
-                
-                // Calculate progress
-                var progress = 0;
-                if (totalApps > 0) {
-                    progress = Math.round((completedApps / totalApps) * 100);
-                }
-                
-                // If state is installed but progress isn't 100, set it to 100
-                if (state === 'installed' && progress < 100) {
-                    progress = 100;
-                    completedApps = totalApps;
-                }
-                
-                gs.info('StoreAppManager - getBatchStatus: Batch ' + batchId + 
-                       ' - State: ' + state + 
-                       ', Progress: ' + progress + '% (' + completedApps + '/' + totalApps + ')');
-                
-                return JSON.stringify({
-                    state: state,
-                    progress: progress,
-                    total_apps: totalApps,
-                    completed_apps: completedApps,
-                    error_message: errorMessage
-                });
-            }
-            
+        // Input validation for batch ID
+        if (!batchSysId || !this._isValidSysId(batchSysId)) {
             return JSON.stringify({
-                state: 'not_found',
-                progress: 0,
-                total_apps: 0,
-                completed_apps: 0
-            });
-            
-        } catch (e) {
-            return JSON.stringify({
-                state: 'error',
+                state: this.BATCH_STATES.ERROR,
                 progress: 0,
                 total_apps: 0,
                 completed_apps: 0,
-                error_message: e.message
+                error_message: 'Invalid batch ID provided'
+            });
+        }
+        
+        try {
+            var planQuery = new GlideRecord('sys_batch_install_plan');
+            if (!planQuery.get(batchSysId)) {
+                return JSON.stringify({
+                    state: this.BATCH_STATES.NOT_FOUND,
+                    progress: 0,
+                    total_apps: 0,
+                    completed_apps: 0
+                });
+            }
+            
+            var statusInfo = {
+                state: planQuery.getValue('state'),
+                errorMsg: planQuery.getValue('error_message')
+            };
+            
+            // Use GlideAggregate for efficient counting
+            var totalItems = this._countBatchItems(batchSysId);
+            var doneItems = this._countBatchItems(batchSysId, this.ITEM_STATES.INSTALLED);
+            
+            // Calculate progress percentage
+            var progressPct = (totalItems > 0) ? Math.round((doneItems * 100) / totalItems) : 0;
+            
+            // Force 100% completion when batch state is installed
+            if (statusInfo.state === this.BATCH_STATES.INSTALLED) {
+                progressPct = 100;
+                doneItems = totalItems;
+            }
+            
+            gs.debug('StoreAppManager - getBatchStatus: Batch ' + batchSysId + 
+                   ' - State: ' + statusInfo.state + 
+                   ', Progress: ' + progressPct + '% (' + doneItems + '/' + totalItems + ')');
+            
+            return JSON.stringify({
+                state: statusInfo.state,
+                progress: progressPct,
+                total_apps: totalItems,
+                completed_apps: doneItems,
+                error_message: statusInfo.errorMsg
+            });
+            
+        } catch (ex) {
+            gs.error('StoreAppManager - getBatchStatus error: ' + ex.message);
+            return JSON.stringify({
+                state: this.BATCH_STATES.ERROR,
+                progress: 0,
+                total_apps: 0,
+                completed_apps: 0,
+                error_message: ex.message
             });
         }
     },
     
     /**
-     * Internal method to compare versions
-     * @param installedVersion - current installed version
-     * @param latestVersion - latest available version
-     * @returns boolean - true if update is available
+     * Count batch install items using GlideAggregate for better performance
+     * @param batchSysId - sys_batch_install_plan sys_id
+     * @param state - optional state filter (e.g., 'installed')
+     * @returns number - count of items
      */
-    _updateAvailable: function(installedVersion, latestVersion) {
-        if (!latestVersion) {
+    _countBatchItems: function(batchSysId, state) {
+        var ga = new GlideAggregate('sys_batch_install_item');
+        ga.addAggregate('COUNT');
+        ga.addQuery('batch_install_plan', batchSysId);
+        if (state) {
+            ga.addQuery('state', state);
+        }
+        ga.query();
+        if (ga.next()) {
+            return parseInt(ga.getAggregate('COUNT'), 10) || 0;
+        }
+        return 0;
+    },
+    
+    /**
+     * Validate sys_id format (32-character hex string)
+     * @param sysId - string to validate
+     * @returns boolean - true if valid sys_id format
+     */
+    _isValidSysId: function(sysId) {
+        if (!sysId || typeof sysId !== 'string') {
             return false;
         }
+        // sys_id is a 32-character hexadecimal string
+        return /^[a-f0-9]{32}$/i.test(sysId);
+    },
+    
+    /**
+     * Compare dotted version strings with optional lexicographical and zeroExtend options.
+     * @param v1 - First version string
+     * @param v2 - Second version string
+     * @param options - Optional configuration:
+     *   - lexicographical: when true, compare parts as strings (e.g., "1a" allowed)
+     *   - zeroExtend: when true, pad the shorter version with "0" parts before comparing
+     * @returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2, NaN if invalid input per options
+     */
+    _versionCompare: function(v1, v2, options) {
+        options = options || {};
+        var lexicographical = !!options.lexicographical;
+        var zeroExtend = !!options.zeroExtend;
         
-        var installedArray = installedVersion.split('.');
-        var latestArray = latestVersion.split('.');
-        var len = Math.max(installedArray.length, latestArray.length);
+        // Fast path: identical strings
+        if (v1 === v2) {
+            return 0;
+        }
         
-        for (var i = 0; i < len; i++) {
-            var installed = installedArray[i] ? parseInt(installedArray[i]) : 0;
-            var latest = latestArray[i] ? parseInt(latestArray[i]) : 0;
-            
-            if (installed < latest) {
-                return true;
-            } else if (installed > latest) {
-                return false;
+        // Precompile appropriate validator for this call
+        var re = lexicographical ? /^\d+[A-Za-z]*$/ : /^\d+$/;
+        
+        var a = v1.split('.');
+        var b = v2.split('.');
+        
+        // Validate parts
+        var i;
+        for (i = 0; i < a.length; i++) {
+            if (!re.test(a[i])) {
+                return NaN;
+            }
+        }
+        for (i = 0; i < b.length; i++) {
+            if (!re.test(b[i])) {
+                return NaN;
             }
         }
         
-        return false;
+        // Zero-extend to same length if requested
+        if (zeroExtend) {
+            var diff = a.length - b.length;
+            if (diff > 0) {
+                for (i = 0; i < diff; i++) {
+                    b.push('0');
+                }
+            } else if (diff < 0) {
+                for (i = 0; i < -diff; i++) {
+                    a.push('0');
+                }
+            }
+        }
+        
+        // Compare part-by-part
+        var len = Math.max(a.length, b.length);
+        for (i = 0; i < len; i++) {
+            var ai = a[i];
+            var bi = b[i];
+            
+            // If one version ran out of parts, the longer one is greater
+            if (ai === undefined) {
+                return -1;
+            }
+            if (bi === undefined) {
+                return 1;
+            }
+            
+            if (lexicographical) {
+                if (ai === bi) {
+                    continue;
+                }
+                // ASCII string comparison
+                return ai > bi ? 1 : -1;
+            } else {
+                // Numeric comparison; parse lazily (unary + is fast)
+                var na = +ai;
+                var nb = +bi;
+                if (na === nb) {
+                    continue;
+                }
+                return na > nb ? 1 : -1;
+            }
+        }
+        
+        return 0;
     },
     
     type: 'StoreAppManager'
