@@ -12,6 +12,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
     const [searchQuery, setSearchQuery] = useState('')
+    const [updateTypeFilter, setUpdateTypeFilter] = useState<string>('all')
 
     const getUpdateTypeColor = (updateType: string) => {
         switch (updateType) {
@@ -39,19 +40,36 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         }
     }
 
-    // Filter apps based on search query
+    // Filter apps based on search query and update type
     const filteredApps = useMemo(() => {
-        if (!searchQuery.trim()) {
-            return apps
+        let result = apps
+
+        // Filter by update type
+        if (updateTypeFilter !== 'all') {
+            result = result.filter(app => app.update_type === updateTypeFilter)
         }
-        const query = searchQuery.toLowerCase()
-        return apps.filter(app => 
-            app.name.toLowerCase().includes(query) ||
-            app.vendor.toLowerCase().includes(query) ||
-            app.version.toLowerCase().includes(query) ||
-            app.latest_version.toLowerCase().includes(query)
-        )
-    }, [apps, searchQuery])
+
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase()
+            result = result.filter(app => 
+                app.name.toLowerCase().includes(query) ||
+                app.vendor.toLowerCase().includes(query) ||
+                app.version.toLowerCase().includes(query) ||
+                app.latest_version.toLowerCase().includes(query)
+            )
+        }
+
+        return result
+    }, [apps, searchQuery, updateTypeFilter])
+
+    // Count apps by update type for filter badges
+    const updateTypeCounts = useMemo(() => ({
+        all: apps.length,
+        Major: apps.filter(app => app.update_type === 'Major').length,
+        Minor: apps.filter(app => app.update_type === 'Minor').length,
+        Patch: apps.filter(app => app.update_type === 'Patch').length
+    }), [apps])
 
     // Calculate pagination
     const totalPages = Math.ceil(filteredApps.length / pageSize)
@@ -89,6 +107,11 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
     const handleClearSearch = () => {
         setSearchQuery('')
         setCurrentPage(1)
+    }
+
+    const handleUpdateTypeFilterChange = (type: string) => {
+        setUpdateTypeFilter(type)
+        setCurrentPage(1) // Reset to first page when filtering
     }
 
     const handlePreviousPage = () => {
@@ -152,9 +175,38 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
             <div className="table-header">
                 <div className="table-info">
                     Showing {startIndex + 1}-{Math.min(endIndex, filteredApps.length)} of {filteredApps.length} 
-                    {searchQuery && ` (filtered from ${apps.length})`} applications
+                    {(searchQuery || updateTypeFilter !== 'all') && ` (filtered from ${apps.length})`} applications
                 </div>
                 <div className="table-controls">
+                    <div className="update-type-filter">
+                        <button 
+                            className={`btn btn-sm ${updateTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleUpdateTypeFilterChange('all')}
+                        >
+                            All ({updateTypeCounts.all})
+                        </button>
+                        <button 
+                            className={`btn btn-sm ${updateTypeFilter === 'Major' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleUpdateTypeFilterChange('Major')}
+                            disabled={updateTypeCounts.Major === 0}
+                        >
+                            Major ({updateTypeCounts.Major})
+                        </button>
+                        <button 
+                            className={`btn btn-sm ${updateTypeFilter === 'Minor' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleUpdateTypeFilterChange('Minor')}
+                            disabled={updateTypeCounts.Minor === 0}
+                        >
+                            Minor ({updateTypeCounts.Minor})
+                        </button>
+                        <button 
+                            className={`btn btn-sm ${updateTypeFilter === 'Patch' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleUpdateTypeFilterChange('Patch')}
+                            disabled={updateTypeCounts.Patch === 0}
+                        >
+                            Patch ({updateTypeCounts.Patch})
+                        </button>
+                    </div>
                     <div className="search-box">
                         <input
                             type="text"

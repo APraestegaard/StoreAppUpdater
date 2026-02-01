@@ -50,3 +50,20 @@ export interface BatchHistory {
     notes?: string
     error_message?: string
 }
+
+export interface CancelBatchResponse {
+    success: boolean
+    message?: string
+    error?: string
+}
+
+export interface ReleaseNotesResponse {
+    success: boolean
+    version?: string
+    short_description?: string
+    vendor?: string
+    publish_date?: string
+    store_link?: string
+    app_manager_link?: string
+    message?: string
+}

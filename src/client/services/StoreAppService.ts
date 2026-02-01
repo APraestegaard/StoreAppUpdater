@@ -1,4 +1,4 @@
-import { StoreApp, BatchInstallResponse, BatchStatusResponse, UpdateCheckResponse, BatchInProgressResponse } from '../types'
+import { StoreApp, BatchInstallResponse, BatchStatusResponse, UpdateCheckResponse, BatchInProgressResponse, CancelBatchResponse } from '../types'
 
 export class StoreAppService {
     private scriptInclude = 'x_1118332_store_ap.StoreAppManager'
@@ -111,6 +111,26 @@ export class StoreAppService {
                     resolve(result)
                 } catch (e) {
                     reject(new Error('Failed to get batch history'))
+                }
+            })
+        })
+    }
+
+    /**
+     * Cancel a batch installation
+     * @param batchId - sys_batch_install_plan sys_id
+     */
+    async cancelBatchInstallation(batchId: string): Promise<CancelBatchResponse> {
+        return new Promise((resolve, reject) => {
+            const ga = new GlideAjax(this.scriptInclude)
+            ga.addParam('sysparm_name', 'cancelBatchInstallation')
+            ga.addParam('sysparm_batch_id', batchId)
+            ga.getXMLAnswer((response: string) => {
+                try {
+                    const result = JSON.parse(response)
+                    resolve(result)
+                } catch (e) {
+                    reject(new Error('Failed to cancel batch installation'))
                 }
             })
         })

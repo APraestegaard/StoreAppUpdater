@@ -6,6 +6,7 @@ import ActionBar from './components/ActionBar'
 import ProgressTracker from './components/ProgressTracker'
 import ConfirmationModal from './components/ConfirmationModal'
 import BatchHistory from './components/BatchHistory'
+import SkeletonTable from './components/SkeletonTable'
 import './app.css'
 
 export default function App() {
@@ -27,7 +28,6 @@ export default function App() {
         link?: string
         batchId?: string
     } | null>(null)
-
     const service = useMemo(() => new StoreAppService(), [])
 
     const loadApps = async () => {
@@ -185,6 +185,27 @@ export default function App() {
         }, 3000)
     }
 
+    const handleCancelBatch = async () => {
+        const currentBatchId = batchId || batchInProgress?.batchId
+        if (!currentBatchId) return
+
+        try {
+            const result = await service.cancelBatchInstallation(currentBatchId)
+            if (result.success) {
+                setSuccess(result.message || 'Batch installation cancelled')
+                setBatchId(null)
+                setExecutionTrackerId(null)
+                setBatchInProgress(null)
+                setIsUpdating(false)
+                void loadApps()
+            } else {
+                setError(result.message || 'Failed to cancel batch installation')
+            }
+        } catch (err) {
+            setError('Failed to cancel batch installation. Please try again.')
+        }
+    }
+
     const dismissMessage = () => {
         setError(null)
         setSuccess(null)
@@ -223,7 +244,8 @@ export default function App() {
                         batchId={batchId || batchInProgress?.batchId || null} 
                         executionTrackerId={executionTrackerId} 
                         mode={batchId ? 'user-initiated' : 'detected'}
-                        onComplete={handleProgressComplete} 
+                        onComplete={handleProgressComplete}
+                        onCancel={handleCancelBatch}
                     />
                 )}
 
@@ -259,10 +281,7 @@ export default function App() {
                 />
 
                 {loading ? (
-                    <div className="loading-state">
-                        <div className="spinner"></div>
-                        <p>Loading applications...</p>
-                    </div>
+                    <SkeletonTable rows={10} />
                 ) : (
                     <>
                         <AppListTable

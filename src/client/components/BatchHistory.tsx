@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { BatchHistory as BatchHistoryType } from '../types'
 import { StoreAppService } from '../services/StoreAppService'
 
@@ -7,13 +7,9 @@ export default function BatchHistory() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isExpanded, setIsExpanded] = useState(false)
-    const service = new StoreAppService()
+    const service = useMemo(() => new StoreAppService(), [])
 
-    useEffect(() => {
-        void loadHistory()
-    }, [])
-
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
         try {
             setLoading(true)
             setError(null)
@@ -24,7 +20,11 @@ export default function BatchHistory() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [service])
+
+    useEffect(() => {
+        void loadHistory()
+    }, [loadHistory])
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)

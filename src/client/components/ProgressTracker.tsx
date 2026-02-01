@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { BatchStatusResponse } from '../types'
 import { StoreAppService } from '../services/StoreAppService'
 
@@ -7,11 +7,13 @@ interface ProgressTrackerProps {
     executionTrackerId: string | null
     mode: 'user-initiated' | 'detected'
     onComplete: () => void
+    onCancel?: () => void
 }
 
-export default function ProgressTracker({ batchId, executionTrackerId, mode, onComplete }: ProgressTrackerProps) {
+export default function ProgressTracker({ batchId, executionTrackerId, mode, onComplete, onCancel }: ProgressTrackerProps) {
     const [status, setStatus] = useState<BatchStatusResponse | null>(null)
-    const service = new StoreAppService()
+    const [isCancelling, setIsCancelling] = useState(false)
+    const service = useMemo(() => new StoreAppService(), [])
 
     useEffect(() => {
         if (!batchId) {
@@ -64,6 +66,8 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
                 return 'Invalid'
             case 'partial_install':
                 return 'Partially Installed'
+            case 'cancelled':
+                return 'Cancelled'
             default:
                 return state
         }
@@ -77,6 +81,7 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             case 'invalid':
                 return 'error'
             case 'partial_install':
+            case 'cancelled':
                 return 'warning'
             case 'in_progress':
                 return 'progress'
@@ -113,6 +118,12 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             {status.state === 'partial_install' && (
                 <div className="warning-details">
                     <strong>⚠️ Partial Installation:</strong> Some applications were installed successfully, but others failed. Check the batch installation plan for details on which applications need to be retried.
+                </div>
+            )}
+
+            {status.state === 'cancelled' && (
+                <div className="warning-details">
+                    <strong>🚫 Installation Cancelled:</strong> The batch installation was cancelled. Some applications may have been partially updated.
                 </div>
             )}
 
@@ -163,6 +174,30 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
                             >
                                 View Execution Tracker
                             </a>
+                        </>
+                    )}
+                    {mode === 'user-initiated' && (status.state === 'pending' || status.state === 'ready') && onCancel && (
+                        <>
+                            <span className="separator">•</span>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={async () => {
+                                    if (confirm('Are you sure you want to cancel this batch installation? This action cannot be undone.')) {
+                                        setIsCancelling(true)
+                                        try {
+                                            await service.cancelBatchInstallation(batchId)
+                                            onCancel()
+                                        } catch (e) {
+                                            alert('Failed to cancel batch installation.')
+                                        } finally {
+                                            setIsCancelling(false)
+                                        }
+                                    }
+                                }}
+                                disabled={isCancelling}
+                            >
+                                {isCancelling ? 'Cancelling...' : 'Cancel Installation'}
+                            </button>
                         </>
                     )}
                 </div>

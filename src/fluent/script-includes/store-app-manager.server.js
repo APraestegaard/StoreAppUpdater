@@ -186,8 +186,19 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     /**
      * Check for available updates from the store
      * This can take some time to run
+     * Requires admin role
      */
     checkForUpdates: function() {
+        // Role check for privileged operation
+        if (!gs.hasRole(this.REQUIRED_ROLE)) {
+            var userName = gs.getUserName();
+            gs.warn('StoreAppManager - checkForUpdates: Access denied for user ' + userName);
+            return JSON.stringify({ 
+                success: false, 
+                message: 'Insufficient privileges. The admin role is required to check for updates.' 
+            });
+        }
+        
         try {
             gs.info('StoreAppManager - checkForUpdates: Starting update check for user ' + gs.getUserName());
             new sn_appclient.UpdateChecker().checkAvailableUpdates();
@@ -201,6 +212,74 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             return JSON.stringify({
                 success: false,
                 message: 'Error checking for updates: ' + e.message
+            });
+        }
+    },
+    
+    /**
+     * Cancel a batch installation that is in pending or ready state
+     * @returns JSON with success status
+     */
+    cancelBatchInstallation: function() {
+        // Role check for privileged operation
+        if (!gs.hasRole(this.REQUIRED_ROLE)) {
+            var userName = gs.getUserName();
+            gs.warn('StoreAppManager - cancelBatchInstallation: Access denied for user ' + userName);
+            return JSON.stringify({ 
+                success: false, 
+                error: 'Insufficient privileges. The admin role is required to cancel batch installations.' 
+            });
+        }
+        
+        var batchSysId = this.getParameter('sysparm_batch_id');
+        
+        // Input validation for batch ID
+        if (!batchSysId || !this._isValidSysId(batchSysId)) {
+            gs.warn('StoreAppManager - cancelBatchInstallation: Invalid batch ID provided: ' + batchSysId);
+            return JSON.stringify({
+                success: false,
+                error: 'Invalid batch ID provided'
+            });
+        }
+        
+        try {
+            var grBatch = new GlideRecord('sys_batch_install_plan');
+            if (!grBatch.get(batchSysId)) {
+                gs.warn('StoreAppManager - cancelBatchInstallation: Batch plan not found: ' + batchSysId);
+                return JSON.stringify({
+                    success: false,
+                    error: 'Batch installation plan not found'
+                });
+            }
+            
+            var currentState = grBatch.getValue('state');
+            
+            // Can only cancel batches that are pending or ready (not yet in_progress)
+            if (currentState !== 'pending' && currentState !== 'ready') {
+                gs.warn('StoreAppManager - cancelBatchInstallation: Cannot cancel batch in state: ' + currentState);
+                return JSON.stringify({
+                    success: false,
+                    error: 'Cannot cancel batch installation. Current state: ' + currentState + '. Only pending or ready batches can be cancelled.'
+                });
+            }
+            
+            // Update the batch state to cancelled/error to stop it
+            grBatch.setValue('state', 'error');
+            grBatch.setValue('error_message', 'Cancelled by user: ' + gs.getUserDisplayName() + ' at ' + new GlideDateTime().getDisplayValue());
+            grBatch.update();
+            
+            gs.info('StoreAppManager - cancelBatchInstallation: Successfully cancelled batch ' + batchSysId + ' by user ' + gs.getUserName());
+            
+            return JSON.stringify({
+                success: true,
+                message: 'Batch installation cancelled successfully'
+            });
+            
+        } catch (e) {
+            gs.error('StoreAppManager - cancelBatchInstallation error: ' + e.message + ' | Stack: ' + e.stack);
+            return JSON.stringify({
+                success: false,
+                error: 'Error cancelling batch installation: ' + e.message
             });
         }
     },
