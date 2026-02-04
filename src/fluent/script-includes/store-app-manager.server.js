@@ -165,10 +165,12 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     name: appTitle,
                     version: appQuery.getValue('version'),
                     latest_version: appQuery.getValue('latest_version'),
+                    assigned_version: appQuery.getValue('assigned_version'),
                     vendor: appQuery.getValue('vendor') || 'ServiceNow',
                     install_date: appQuery.getValue('install_date'),
                     indicators: indicators,
-                    product_families: productFamilies
+                    product_families: productFamilies,
+                    update_available: appQuery.getValue('update_available')
                 });
             }
             
@@ -199,6 +201,10 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 var app = appData[i];
                 var installedVer = app.version;
                 var storeSysId = app.sys_id;
+                var updateAvailableRaw = app.update_available;
+                var hasUpdateFlagData = updateAvailableRaw !== null && updateAvailableRaw !== '';
+                var updateFlagValue = this._stringToBoolean(updateAvailableRaw);
+                var assignedVersion = app.assigned_version;
                 
                 // Find the highest compatible version greater than installed
                 var bestVersion = installedVer;
@@ -222,32 +228,56 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     if (latestVer && this._versionCompare(latestVer, installedVer) === 1) {
                         bestVersion = latestVer;
                         foundHigher = true;
+                    } else if (assignedVersion && this._versionCompare(assignedVersion, installedVer) === 1) {
+                        bestVersion = assignedVersion;
+                        foundHigher = true;
                     }
                 }
                 
-                if (foundHigher) {
-                    // Determine update type (Major/Minor/Patch)
-                    var updateType = this._determineUpdateType(installedVer, bestVersion);
-                    
-                    // Check if app has unavailability indicator
-                    var isUnavailable = this._hasIndicatorWithId(app.indicators, 'not_available_for_instance_type');
-                    
-                    // Mark as processed and build result object
-                    seenApps[app.name] = true;
-                    result.push({
-                        sys_id: storeSysId,
-                        name: app.name,
-                        version: installedVer,
-                        latest_version: bestVersion,
-                        update_type: updateType,
-                        vendor: app.vendor,
-                        install_date: app.install_date,
-                        needs_update: true,
-                        indicators: app.indicators,
-                        is_unavailable: isUnavailable,
-                        product_families: app.product_families
-                    });
+                var includeApp = false;
+                if (hasUpdateFlagData) {
+                    includeApp = updateFlagValue;
+                    if (includeApp && !foundHigher) {
+                        var versionHint = app.latest_version || assignedVersion;
+                        if (versionHint && this._versionCompare(versionHint, installedVer) === 1) {
+                            bestVersion = versionHint;
+                            foundHigher = true;
+                        }
+                    }
+                } else {
+                    includeApp = foundHigher;
                 }
+                
+                if (!includeApp) {
+                    continue;
+                }
+                
+                if (!foundHigher && includeApp) {
+                    bestVersion = app.latest_version || assignedVersion || installedVer;
+                }
+
+                // Determine update type (Major/Minor/Patch)
+                var updateType = this._determineUpdateType(installedVer, bestVersion);
+                
+                // Check if app has unavailability indicator
+                var isUnavailable = this._hasIndicatorWithId(app.indicators, 'not_available_for_instance_type');
+                
+                // Mark as processed and build result object
+                seenApps[app.name] = true;
+                result.push({
+                    sys_id: storeSysId,
+                    name: app.name,
+                    version: installedVer,
+                    latest_version: bestVersion,
+                    update_type: updateType,
+                    vendor: app.vendor,
+                    install_date: app.install_date,
+                    needs_update: includeApp,
+                    update_available: includeApp,
+                    indicators: app.indicators,
+                    is_unavailable: isUnavailable,
+                    product_families: app.product_families
+                });
             }
             
             return JSON.stringify(result);
@@ -616,6 +646,27 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             gs.warn('StoreAppManager - _determineUpdateType error: ' + e.message + ' | currentVer: ' + currentVer + ', newVer: ' + newVer);
             return 'Patch'; // Default fallback
         }
+    },
+    
+    /**
+     * Convert common string representations to boolean
+     * @param value - string/boolean/null from GlideRecord
+     * @returns boolean true when value represents true, otherwise false
+     */
+    _stringToBoolean: function(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'string') {
+            var normalized = value.trim().toLowerCase();
+            if (normalized === 'true' || normalized === '1') {
+                return true;
+            }
+            if (normalized === 'false' || normalized === '0') {
+                return false;
+            }
+        }
+        return false;
     },
     
     /**

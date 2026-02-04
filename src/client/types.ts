@@ -16,6 +16,7 @@ export interface StoreApp {
     vendor: string
     install_date: string
     needs_update: boolean
+    update_available: boolean
     indicators: Indicator[]
     is_unavailable: boolean
     product_families: string[]
