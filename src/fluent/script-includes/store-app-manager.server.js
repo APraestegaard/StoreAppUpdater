@@ -299,6 +299,31 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     error: 'No applications provided to update. Please select at least one application.' 
                 });
             }
+
+            // Cleanup any existing pending batch plans to ensure a clean state
+            // This prevents merging new apps with old, abandoned batch attempts
+            var pendingBatchGr = new GlideRecord('sys_batch_install_plan');
+            pendingBatchGr.addQuery('state', 'pending');
+            pendingBatchGr.addQuery('sys_created_by', gs.getUserName());
+            pendingBatchGr.query();
+            
+            while (pendingBatchGr.next()) {
+                gs.info('StoreAppManager - Cancelling existing pending batch plan: ' + pendingBatchGr.getUniqueValue());
+                pendingBatchGr.deleteRecord();
+            }
+            
+            // Check for IN_PROGRESS batches which we cannot interrupt
+            var inProgressBatchGr = new GlideRecord('sys_batch_install_plan');
+            inProgressBatchGr.addQuery('state', 'in_progress');
+            inProgressBatchGr.setLimit(1);
+            inProgressBatchGr.query();
+            
+            if (inProgressBatchGr.next()) {
+                 return JSON.stringify({
+                    success: false,
+                    error: 'A batch installation is currently in progress (' + (inProgressBatchGr.getValue('name') || inProgressBatchGr.getUniqueValue()) + '). Please wait for it to complete.'
+                });
+            }
             
             gs.info('StoreAppManager - updateSelectedApps: Starting batch update for ' + appsToUpdate.length + ' app(s) by user ' + gs.getUserName());
             
@@ -614,138 +639,6 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
      * @param value - string/boolean/null from GlideRecord
      * @returns boolean true when value represents true, otherwise false
      */
-    _stringToBoolean: function(value) {
-        if (typeof value === 'boolean') {
-            return value;
-        }
-        if (typeof value === 'string') {
-            var normalized = value.trim().toLowerCase();
-            if (normalized === 'true' || normalized === '1') {
-                return true;
-            }
-            if (normalized === 'false' || normalized === '0') {
-                return false;
-            }
-        }
-        return false;
-    },
-    
-    /**
-     * Check if indicators array contains a specific indicator ID
-     * @param indicators - array of indicator objects
-     * @param indicatorId - indicator ID to search for
-     * @returns boolean - true if indicator found
-     */
-    _hasIndicatorWithId: function(indicators, indicatorId) {
-        if (!Array.isArray(indicators)) {
-            return false;
-        }
-        for (var i = 0; i < indicators.length; i++) {
-            if (indicators[i].id === indicatorId) {
-                return true;
-            }
-        }
-        return false;
-    },
-    
-    /**
-     * Validate sys_id format (32-character hex string)
-     * @param sysId - string to validate
-     * @returns boolean - true if valid sys_id format
-     */
-    _isValidSysId: function(sysId) {
-        if (!sysId || typeof sysId !== 'string') {
-            return false;
-        }
-        // sys_id is a 32-character hexadecimal string
-        return /^[a-f0-9]{32}$/i.test(sysId);
-    },
-    
-    /**
-     * Compare dotted version strings with optional lexicographical and zeroExtend options.
-     * @param v1 - First version string
-     * @param v2 - Second version string
-     * @param options - Optional configuration:
-     *   - lexicographical: when true, compare parts as strings (e.g., "1a" allowed)
-     *   - zeroExtend: when true, pad the shorter version with "0" parts before comparing
-     * @returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2, NaN if invalid input per options
-     */
-    _versionCompare: function(v1, v2, options) {
-        options = options || {};
-        var lexicographical = !!options.lexicographical;
-        var zeroExtend = !!options.zeroExtend;
-        
-        // Fast path: identical strings
-        if (v1 === v2) {
-            return 0;
-        }
-        
-        // Precompile appropriate validator for this call
-        var re = lexicographical ? /^\d+[A-Za-z]*$/ : /^\d+$/;
-        
-        var a = v1.split('.');
-        var b = v2.split('.');
-        
-        // Validate parts
-        var i;
-        for (i = 0; i < a.length; i++) {
-            if (!re.test(a[i])) {
-                return NaN;
-            }
-        }
-        for (i = 0; i < b.length; i++) {
-            if (!re.test(b[i])) {
-                return NaN;
-            }
-        }
-        
-        // Zero-extend to same length if requested
-        if (zeroExtend) {
-            var diff = a.length - b.length;
-            if (diff > 0) {
-                for (i = 0; i < diff; i++) {
-                    b.push('0');
-                }
-            } else if (diff < 0) {
-                for (i = 0; i < -diff; i++) {
-                    a.push('0');
-                }
-            }
-        }
-        
-        // Compare part-by-part
-        var len = Math.max(a.length, b.length);
-        for (i = 0; i < len; i++) {
-            var ai = a[i];
-            var bi = b[i];
-            
-            // If one version ran out of parts, the longer one is greater
-            if (ai === undefined) {
-                return -1;
-            }
-            if (bi === undefined) {
-                return 1;
-            }
-            
-            if (lexicographical) {
-                if (ai === bi) {
-                    continue;
-                }
-                // ASCII string comparison
-                return ai > bi ? 1 : -1;
-            } else {
-                // Numeric comparison; parse lazily (unary + is fast)
-                var na = +ai;
-                var nb = +bi;
-                if (na === nb) {
-                    continue;
-                }
-                return na > nb ? 1 : -1;
-            }
-        }
-        
-        return 0;
-    },
     
     type: 'StoreAppManager'
 });
