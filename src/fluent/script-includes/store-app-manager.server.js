@@ -100,6 +100,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             appQuery.addQuery('install_date', '!=', '');
             appQuery.addQuery('hide_on_ui', false);
             appQuery.addQuery('update_available', true);
+            appQuery.addActiveQuery();
             
             appQuery.orderBy('name');
             appQuery.query();
@@ -116,6 +117,10 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 var installedVer = appQuery.getValue('version');
                 var latestVer = appQuery.getValue('latest_version');
                 
+                if (installedVer === latestVer) {
+                    continue;
+                }
+
                 // Parse indicators
                 var indicators = [];
                 var indicatorsStr = appQuery.getValue('indicators');
@@ -128,6 +133,10 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     } catch (e) {
                          gs.warn('StoreAppManager - Failed to parse indicators for app: ' + appTitle + ' | Error: ' + e.message);
                     }
+                }
+
+                if (this._hasIndicatorWithId(indicators, 'not_licensed')) {
+                    continue;
                 }
                 
                 // Parse products field to extract product families
@@ -169,7 +178,8 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     update_available: true,
                     indicators: indicators,
                     is_unavailable: isUnavailable,
-                    product_families: productFamilies
+                    product_families: productFamilies,
+                    dependencies: appQuery.getValue('dependencies')
                 });
             }
             
@@ -198,7 +208,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
         
         try {
             gs.info('StoreAppManager - checkForUpdates: Starting update check for user ' + gs.getUserName());
-            new sn_appclient.UpdateChecker().checkAvailableUpdates();
+            new sn_appclient.UpdateChecker().checkAvailableUpdates(true);
             gs.info('StoreAppManager - checkForUpdates: Successfully completed update check');
             return JSON.stringify({
                 success: true,
@@ -265,6 +275,25 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             
             // Build package list for batch upgrade (AppUpgrader format)
             var packages = [];
+
+            // Optimization: Collect all sys_ids to perform a single batch query for version validation
+            var appSysIds = [];
+            for (var i = 0; i < appsToUpdate.length; i++) {
+                if (appsToUpdate[i].sys_id) {
+                    appSysIds.push(appsToUpdate[i].sys_id);
+                }
+            }
+            
+            // Map of sys_id -> current installed version
+            var currentVersions = {};
+            if (appSysIds.length > 0) {
+                var storeAppGr = new GlideRecord('sys_store_app');
+                storeAppGr.addQuery('sys_id', 'IN', appSysIds.join(','));
+                storeAppGr.query();
+                while (storeAppGr.next()) {
+                    currentVersions[storeAppGr.getUniqueValue()] = (storeAppGr.getValue('version') || '').toString().trim();
+                }
+            }
             
             for (var i = 0; i < appsToUpdate.length; i++) {
                 var app = appsToUpdate[i];
@@ -273,6 +302,16 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 if (!app.sys_id || !app.name || !app.latest_version) {
                     gs.warn('StoreAppManager - updateSelectedApps: Invalid app object at index ' + i + ': ' + JSON.stringify(app));
                     continue; // Skip invalid apps
+                }
+
+                // Verify upgrade necessity against current DB record
+                // This prevents "INVALID" batch states caused by including apps that are already up to date
+                var installedVersion = currentVersions[app.sys_id];
+                var requestedVersion = (app.latest_version || '').toString().trim();
+                
+                if (installedVersion && installedVersion === requestedVersion) {
+                    gs.info('StoreAppManager - Skipping app {0} as it is already on version {1}', app.name, installedVersion);
+                    continue;
                 }
                 
                 packages.push({
