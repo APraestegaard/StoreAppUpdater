@@ -144,17 +144,19 @@ body {
     border: 1px solid #d3d7d9;
     border-radius: 4px;
     margin-bottom: 16px;
+    gap: 16px;
 }
 
 .action-group {
     display: flex;
     gap: 8px;
+    align-items: center;
 }
 
-.action-group.tertiary {
-    margin-left: auto;
+.action-group.filters {
     border-left: 1px solid #d3d7d9;
     padding-left: 16px;
+    margin-left: auto;
 }
 
 .toggle-label {

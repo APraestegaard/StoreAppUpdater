@@ -29,7 +29,7 @@ export default function ActionBar({
 }: ActionBarProps) {
     return (
         <div className="action-bar">
-            <div className="action-group primary">
+            <div className="action-group">
                 <button
                     onClick={onUpdateSelected}
                     disabled={selectedCount === 0 || isUpdating}
@@ -46,8 +46,6 @@ export default function ActionBar({
                 >
                     Update All {appsCount > 0 && `(${appsCount})`}
                 </button>
-            </div>
-            <div className="action-group secondary">
                 <button
                     onClick={onCheckUpdates}
                     disabled={isCheckingUpdates || isUpdating}
@@ -65,7 +63,7 @@ export default function ActionBar({
                     Refresh
                 </button>
             </div>
-            <div className="action-group tertiary">
+            <div className="action-group filters">
                 <label className="toggle-label" title="Show applications that cannot be installed on this instance type">
                     <input
                         type="checkbox"

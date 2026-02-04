@@ -69,13 +69,16 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         return result
     }, [apps, searchQuery, updateTypeFilter, showUnavailableApps])
 
-    // Count apps by update type for filter badges
-    const updateTypeCounts = useMemo(() => ({
-        all: apps.length,
-        Major: apps.filter(app => app.update_type === 'Major').length,
-        Minor: apps.filter(app => app.update_type === 'Minor').length,
-        Patch: apps.filter(app => app.update_type === 'Patch').length
-    }), [apps])
+    // Count apps by update type for filter badges (only available apps)
+    const updateTypeCounts = useMemo(() => {
+        const availableApps = apps.filter(app => !app.is_unavailable)
+        return {
+            all: availableApps.length,
+            Major: availableApps.filter(app => app.update_type === 'Major').length,
+            Minor: availableApps.filter(app => app.update_type === 'Minor').length,
+            Patch: availableApps.filter(app => app.update_type === 'Patch').length
+        }
+    }, [apps])
 
     // Calculate pagination
     const totalPages = Math.ceil(filteredApps.length / pageSize)
