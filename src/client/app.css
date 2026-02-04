@@ -1230,10 +1230,10 @@ body {
     color: #8b9da3;
 }
 
-.history-error,
+.history-error-message,
 .history-empty {
     padding: 20px;
-    text-align: center;
+    text-align: left;
     color: #8b9da3;
     font-size: 14px;
 }
@@ -1264,6 +1264,10 @@ body {
     border-left-color: #dc3545;
 }
 
+.history-item.history-invalid {
+    border-left-color: #dc3545;
+}
+
 .history-item.history-warning {
     border-left-color: #ffc107;
 }
@@ -1285,6 +1289,7 @@ body {
 
 .history-info {
     flex: 1;
+    text-align: left;
 }
 
 .history-name {
@@ -1292,7 +1297,7 @@ body {
     font-weight: 600;
     color: #0066b3;
     text-decoration: none;
-    display: inline-block;
+    display: block;
     margin-bottom: 4px;
 }
 
@@ -1327,6 +1332,11 @@ body {
 }
 
 .history-state-badge.history-error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.history-state-badge.history-invalid {
     background-color: #f8d7da;
     color: #721c24;
 }
