@@ -125,7 +125,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 var installedVer = appQuery.getValue('version');
                 var storeSysId = appQuery.getUniqueValue();
                 
-                // Query sys_app_version for compatible versions
+                // Query sys_app_version for compatible versions (optimized with orderByDesc and setLimit)
                 var versionQuery = new GlideRecord('sys_app_version');
                 versionQuery.addQuery('source_app_id', storeSysId);
                 if (buildName) {
@@ -133,18 +133,19 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 }
                 versionQuery.addQuery('version', '!=', installedVer);
                 versionQuery.orderByDesc('version');
+                versionQuery.setLimit(1); // Get only the highest version from database
                 versionQuery.query();
                 
                 // Find the highest compatible version greater than installed
                 var bestVersion = installedVer;
                 var foundHigher = false;
                 
-                while (versionQuery.next()) {
+                // Process only the top version record from database (setLimit optimization)
+                if (versionQuery.next()) {
                     var candidate = versionQuery.getValue('version');
                     if (this._versionCompare(candidate, bestVersion) === 1) {
                         bestVersion = candidate;
                         foundHigher = true;
-                        // Could break here for performance, but continue to find absolute highest
                     }
                 }
                 
