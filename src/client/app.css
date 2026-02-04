@@ -151,6 +151,28 @@ body {
     gap: 8px;
 }
 
+.action-group.tertiary {
+    margin-left: auto;
+    border-left: 1px solid #d3d7d9;
+    padding-left: 16px;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #293e40;
+    user-select: none;
+}
+
+.toggle-input {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
 /* Buttons */
 .btn {
     padding: 8px 16px;
@@ -351,6 +373,20 @@ body {
     background-color: #e6f2ff;
 }
 
+.sn-table tbody tr.app-row--unavailable {
+    opacity: 0.65;
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.sn-table tbody tr.app-row--unavailable:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+.app-row--unavailable input[type='checkbox'] {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .checkbox-col {
     width: 40px;
     text-align: center;
@@ -364,6 +400,23 @@ body {
 
 .app-name {
     font-weight: 600;
+}
+
+.app-name-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.indicator-icon {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #d32f2f;
+    padding: 2px 6px;
+    background-color: #ffebee;
+    border-radius: 3px;
+    white-space: nowrap;
 }
 
 .app-name a {

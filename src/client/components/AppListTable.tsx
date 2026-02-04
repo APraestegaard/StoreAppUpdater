@@ -6,9 +6,10 @@ interface AppListTableProps {
     selectedApps: Set<string>
     onSelectApp: (sysId: string, selected: boolean) => void
     onSelectAll: (selected: boolean) => void
+    showUnavailableApps: boolean
 }
 
-export default function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll }: AppListTableProps) {
+export default function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll, showUnavailableApps }: AppListTableProps) {
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
     const [searchQuery, setSearchQuery] = useState('')
@@ -40,9 +41,14 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         }
     }
 
-    // Filter apps based on search query and update type
+    // Filter apps based on search query, update type, and unavailability
     const filteredApps = useMemo(() => {
         let result = apps
+
+        // Filter by unavailability (show only available unless toggled)
+        if (!showUnavailableApps) {
+            result = result.filter(app => !app.is_unavailable)
+        }
 
         // Filter by update type
         if (updateTypeFilter !== 'all') {
@@ -61,7 +67,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         }
 
         return result
-    }, [apps, searchQuery, updateTypeFilter])
+    }, [apps, searchQuery, updateTypeFilter, showUnavailableApps])
 
     // Count apps by update type for filter badges
     const updateTypeCounts = useMemo(() => ({
@@ -78,19 +84,28 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
     const paginatedApps = useMemo(() => filteredApps.slice(startIndex, endIndex), [filteredApps, startIndex, endIndex])
 
     // Check if all visible apps on current page are selected
-    const allSelected = paginatedApps.length > 0 && paginatedApps.every(app => selectedApps.has(app.sys_id))
+    const allSelected = paginatedApps.length > 0 && paginatedApps.filter(app => !app.is_unavailable).every(app => selectedApps.has(app.sys_id))
 
     const handleSelectAllChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
-            // Select all apps on current page
-            paginatedApps.forEach(app => onSelectApp(app.sys_id, true))
+            // Select all available apps on current page
+            paginatedApps.forEach(app => {
+                if (!app.is_unavailable) {
+                    onSelectApp(app.sys_id, true)
+                }
+            })
         } else {
             // Deselect all apps on current page
             paginatedApps.forEach(app => onSelectApp(app.sys_id, false))
         }
     }
 
-    const handleSelectChange = (sysId: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleSelectChange = (sysId: string, isUnavailable: boolean) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Don't allow selecting unavailable apps
+        if (isUnavailable) {
+            e.preventDefault()
+            return
+        }
         onSelectApp(sysId, e.target.checked)
     }
 
@@ -272,24 +287,39 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                 </thead>
                 <tbody>
                     {paginatedApps.map((app) => (
-                        <tr key={app.sys_id} className={selectedApps.has(app.sys_id) ? 'selected' : ''}>
+                        <tr 
+                            key={app.sys_id} 
+                            className={`${selectedApps.has(app.sys_id) ? 'selected' : ''} ${app.is_unavailable ? 'app-row--unavailable' : ''}`}
+                        >
                             <td className="checkbox-col">
                                 <input
                                     type="checkbox"
                                     checked={selectedApps.has(app.sys_id)}
-                                    onChange={handleSelectChange(app.sys_id)}
-                                    aria-label={`Select ${app.name}`}
+                                    onChange={handleSelectChange(app.sys_id, app.is_unavailable)}
+                                    disabled={app.is_unavailable}
+                                    aria-label={`Select ${app.name}${app.is_unavailable ? ' (unavailable)' : ''}`}
+                                    title={app.is_unavailable ? 'This application cannot be installed on this instance type' : ''}
                                 />
                             </td>
                             <td className="app-name">
-                                <a 
-                                    href={`/now/app-manager/home/app/id/${app.sys_id}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="View application in App Manager"
-                                >
-                                    {app.name}
-                                </a>
+                                <div className="app-name-container">
+                                    {app.is_unavailable && (
+                                        <span 
+                                            className="indicator-icon" 
+                                            title={app.indicators.find(ind => ind.id === 'not_available_for_instance_type')?.tooltip || 'Unavailable'}
+                                        >
+                                            [Unavailable]
+                                        </span>
+                                    )}
+                                    <a 
+                                        href={`/now/app-manager/home/app/id/${app.sys_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View application in App Manager"
+                                    >
+                                        {app.name}
+                                    </a>
+                                </div>
                             </td>
                             <td className="version">{app.version}</td>
                             <td className="version latest">{app.latest_version}</td>

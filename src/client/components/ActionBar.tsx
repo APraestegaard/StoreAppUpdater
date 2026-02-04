@@ -9,6 +9,9 @@ interface ActionBarProps {
     onUpdateAll: () => void
     onCheckUpdates: () => void
     onRefresh: () => void
+    unavailableCount: number
+    showUnavailableApps: boolean
+    onToggleUnavailable: (show: boolean) => void
 }
 
 export default function ActionBar({
@@ -20,6 +23,9 @@ export default function ActionBar({
     onUpdateAll,
     onCheckUpdates,
     onRefresh,
+    unavailableCount,
+    showUnavailableApps,
+    onToggleUnavailable,
 }: ActionBarProps) {
     return (
         <div className="action-bar">
@@ -58,6 +64,17 @@ export default function ActionBar({
                 >
                     Refresh
                 </button>
+            </div>
+            <div className="action-group tertiary">
+                <label className="toggle-label" title="Show applications that cannot be installed on this instance type">
+                    <input
+                        type="checkbox"
+                        checked={showUnavailableApps}
+                        onChange={(e) => onToggleUnavailable(e.target.checked)}
+                        className="toggle-input"
+                    />
+                    Show Unavailable Apps {unavailableCount > 0 && `(${unavailableCount})`}
+                </label>
             </div>
         </div>
     )

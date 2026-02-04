@@ -128,13 +128,27 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 appSysIds.push(storeSysId);
                 
                 // Cache app data for later use
+                var indicators = [];
+                var indicatorsStr = appQuery.getValue('indicators');
+                if (indicatorsStr) {
+                    try {
+                        var parsedIndicators = JSON.parse(indicatorsStr);
+                        if (Array.isArray(parsedIndicators)) {
+                            indicators = parsedIndicators;
+                        }
+                    } catch (e) {
+                        gs.warn('StoreAppManager - Failed to parse indicators for app: ' + appTitle + ' | Error: ' + e.message);
+                    }
+                }
+                
                 appData.push({
                     sys_id: storeSysId,
                     name: appTitle,
                     version: appQuery.getValue('version'),
                     latest_version: appQuery.getValue('latest_version'),
                     vendor: appQuery.getValue('vendor') || 'ServiceNow',
-                    install_date: appQuery.getValue('install_date')
+                    install_date: appQuery.getValue('install_date'),
+                    indicators: indicators
                 });
             }
             
@@ -195,6 +209,9 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     // Determine update type (Major/Minor/Patch)
                     var updateType = this._determineUpdateType(installedVer, bestVersion);
                     
+                    // Check if app has unavailability indicator
+                    var isUnavailable = this._hasIndicatorWithId(app.indicators, 'not_available_for_instance_type');
+                    
                     // Mark as processed and build result object
                     seenApps[app.name] = true;
                     result.push({
@@ -205,7 +222,9 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                         update_type: updateType,
                         vendor: app.vendor,
                         install_date: app.install_date,
-                        needs_update: true
+                        needs_update: true,
+                        indicators: app.indicators,
+                        is_unavailable: isUnavailable
                     });
                 }
             }
@@ -576,6 +595,24 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             gs.warn('StoreAppManager - _determineUpdateType error: ' + e.message + ' | currentVer: ' + currentVer + ', newVer: ' + newVer);
             return 'Patch'; // Default fallback
         }
+    },
+    
+    /**
+     * Check if indicators array contains a specific indicator ID
+     * @param indicators - array of indicator objects
+     * @param indicatorId - indicator ID to search for
+     * @returns boolean - true if indicator found
+     */
+    _hasIndicatorWithId: function(indicators, indicatorId) {
+        if (!Array.isArray(indicators)) {
+            return false;
+        }
+        for (var i = 0; i < indicators.length; i++) {
+            if (indicators[i].id === indicatorId) {
+                return true;
+            }
+        }
+        return false;
     },
     
     /**

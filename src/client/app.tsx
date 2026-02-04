@@ -21,6 +21,7 @@ export default function App() {
     const [executionTrackerId, setExecutionTrackerId] = useState<string | null>(null)
     const [showConfirmModal, setShowConfirmModal] = useState(false)
     const [pendingUpdateApps, setPendingUpdateApps] = useState<StoreApp[]>([])
+    const [showUnavailableApps, setShowUnavailableApps] = useState(false)
     const [batchInProgress, setBatchInProgress] = useState<{
         inProgress: boolean
         batchName?: string
@@ -211,6 +212,10 @@ export default function App() {
         setSuccess(null)
     }
 
+    const unavailableCount = useMemo(() => {
+        return apps.filter(app => app.is_unavailable).length
+    }, [apps])
+
     return (
         <div className="app">
             <header className="app-header">
@@ -270,7 +275,7 @@ export default function App() {
                 )}
 
                 <ActionBar
-                    appsCount={apps.length}
+                    appsCount={apps.filter(app => !app.is_unavailable).length}
                     selectedCount={selectedApps.size}
                     isUpdating={isUpdating || batchInProgress?.inProgress || false}
                     isCheckingUpdates={isCheckingUpdates}
@@ -278,6 +283,9 @@ export default function App() {
                     onUpdateAll={handleUpdateAll}
                     onCheckUpdates={handleCheckUpdates}
                     onRefresh={loadApps}
+                    unavailableCount={unavailableCount}
+                    showUnavailableApps={showUnavailableApps}
+                    onToggleUnavailable={setShowUnavailableApps}
                 />
 
                 {loading ? (
@@ -289,6 +297,7 @@ export default function App() {
                             selectedApps={selectedApps}
                             onSelectApp={handleSelectApp}
                             onSelectAll={handleSelectAll}
+                            showUnavailableApps={showUnavailableApps}
                         />
                         
                         <BatchHistory />

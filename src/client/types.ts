@@ -1,3 +1,12 @@
+export interface Indicator {
+    id: string
+    order: number
+    message: string
+    tooltip: string
+    type: 'error' | 'warning' | 'info'
+    show_as_filter: boolean
+}
+
 export interface StoreApp {
     sys_id: string
     name: string
@@ -7,6 +16,8 @@ export interface StoreApp {
     vendor: string
     install_date: string
     needs_update: boolean
+    indicators: Indicator[]
+    is_unavailable: boolean
 }
 
 export interface BatchInstallResponse {
