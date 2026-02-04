@@ -161,8 +161,9 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 // Determine update type (Major/Minor/Patch)
                 var updateType = this._determineUpdateType(installedVer, latestVer);
                 
-                // Check if app has unavailability indicator
-                var isUnavailable = this._hasIndicatorWithId(indicators, 'not_available_for_instance_type');
+                // Check if app has unavailability indicator (e.g., incompatible or not available for instance type)
+                var isUnavailable = this._hasIndicatorWithId(indicators, 'not_available_for_instance_type') || 
+                                   this._hasIndicatorWithId(indicators, 'incompatible');
                 
                 // Mark as processed and build result object
                 seenApps[appTitle] = true;
@@ -340,12 +341,29 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             
             // Map of sys_id -> current installed version
             var currentVersions = {};
+            var unavailableApps = {};
+            
             if (appSysIds.length > 0) {
                 var storeAppGr = new GlideRecord('sys_store_app');
                 storeAppGr.addQuery('sys_id', 'IN', appSysIds.join(','));
                 storeAppGr.query();
                 while (storeAppGr.next()) {
-                    currentVersions[storeAppGr.getUniqueValue()] = (storeAppGr.getValue('version') || '').toString().trim();
+                    var sId = storeAppGr.getUniqueValue();
+                    currentVersions[sId] = (storeAppGr.getValue('version') || '').toString().trim();
+                    
+                    // Check availability
+                    var indicatorsStr = storeAppGr.getValue('indicators');
+                    if (indicatorsStr) {
+                        try {
+                            var inds = JSON.parse(indicatorsStr);
+                            if (this._hasIndicatorWithId(inds, 'not_available_for_instance_type') || 
+                                this._hasIndicatorWithId(inds, 'incompatible')) {
+                                unavailableApps[sId] = true;
+                            }
+                        } catch(e) {
+                            gs.warn('StoreAppManager - Failed to parse indicators for validation: ' + e.message);
+                        }
+                    }
                 }
             }
             
@@ -363,6 +381,11 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 var installedVersion = currentVersions[app.sys_id];
                 var requestedVersion = (app.latest_version || '').toString().trim();
                 
+                if (unavailableApps[app.sys_id]) {
+                    gs.info('StoreAppManager - Skipping unavailable/incompatible app: {0}', app.name);
+                    continue;
+                }
+
                 if (installedVersion && installedVersion === requestedVersion) {
                     gs.info('StoreAppManager - Skipping app {0} as it is already on version {1}', app.name, installedVersion);
                     continue;
@@ -472,21 +495,21 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
      * @param batchId - sys_batch_install_plan sys_id
      */
     getBatchStatus: function() {
-        var batchSysId = this.getParameter('sysparm_batch_id');
-        
-        // Input validation for batch ID
-        if (!batchSysId || !this._isValidSysId(batchSysId)) {
-            gs.warn('StoreAppManager - getBatchStatus: Invalid batch ID provided: ' + batchSysId);
-            return JSON.stringify({
-                state: this.BATCH_STATES.ERROR,
-                progress: 0,
-                total_apps: 0,
-                completed_apps: 0,
-                error_message: 'Invalid batch ID provided'
-            });
-        }
-        
         try {
+            var batchSysId = this.getParameter('sysparm_batch_id');
+            
+            // Input validation for batch ID
+            if (!batchSysId || !this._isValidSysId(batchSysId)) {
+                gs.warn('StoreAppManager - getBatchStatus: Invalid batch ID provided: ' + batchSysId);
+                return JSON.stringify({
+                    state: this.BATCH_STATES.ERROR,
+                    progress: 0,
+                    total_apps: 0,
+                    completed_apps: 0,
+                    error_message: 'Invalid batch ID provided'
+                });
+            }
+            
             var planQuery = new GlideRecord('sys_batch_install_plan');
             if (!planQuery.get(batchSysId)) {
                 gs.warn('StoreAppManager - getBatchStatus: Batch plan not found: ' + batchSysId);
@@ -547,6 +570,17 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             });
         }
     },
+
+    /**
+     * Validate Sys ID format
+     * @param sysId - string to check
+     * @returns boolean
+     */
+    _isValidSysId: function(sysId) {
+        if (!sysId) return false;
+        var sysIdRegex = /^[0-9a-f]{32}$/i;
+        return sysIdRegex.test(sysId);
+    },
     
     /**
      * Count batch install items using GlideAggregate for better performance
@@ -595,6 +629,24 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
         }
     },
     
+    /**
+     * Helper to check if indicators array contains specific ID
+     * @param indicators - array of indicator objects
+     * @param id - indicator ID to check
+     * @returns boolean
+     */
+    _hasIndicatorWithId: function(indicators, id) {
+        if (!indicators || !Array.isArray(indicators)) {
+            return false;
+        }
+        for (var i = 0; i < indicators.length; i++) {
+            if (indicators[i] && indicators[i].id === id) {
+                return true;
+            }
+        }
+        return false;
+    },
+
     /**
      * Determine update type based on version comparison
      * @param currentVer - current version string (e.g., "1.2.3")

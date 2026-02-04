@@ -140,8 +140,8 @@ export default function App() {
     }
 
     const handleUpdateAll = async () => {
-        // Show confirmation modal with all apps
-        setPendingUpdateApps(apps)
+        // Show confirmation modal with all available apps (exclude unavailable ones)
+        setPendingUpdateApps(apps.filter(app => !app.is_unavailable))
         setShowConfirmModal(true)
     }
 
