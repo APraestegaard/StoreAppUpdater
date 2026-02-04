@@ -500,6 +500,33 @@ body {
     color: #383d41;
 }
 
+/* Product Family Styling */
+.product-families-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.product-family-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background-color: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.no-family {
+    color: #8b9da3;
+    font-style: italic;
+}
+
 /* Actions Column */
 .actions-col {
     width: 80px;

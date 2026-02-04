@@ -141,6 +141,25 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     }
                 }
                 
+                // Parse products field to extract product families
+                var productFamilies = [];
+                var productsStr = appQuery.getValue('products');
+                if (productsStr) {
+                    try {
+                        var parsedProducts = JSON.parse(productsStr);
+                        if (Array.isArray(parsedProducts)) {
+                            for (var k = 0; k < parsedProducts.length; k++) {
+                                var product = parsedProducts[k];
+                                if (product.productFamily) {
+                                    productFamilies.push(product.productFamily);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        gs.warn('StoreAppManager - Failed to parse products for app: ' + appTitle + ' | Error: ' + e.message);
+                    }
+                }
+                
                 appData.push({
                     sys_id: storeSysId,
                     name: appTitle,
@@ -148,7 +167,8 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     latest_version: appQuery.getValue('latest_version'),
                     vendor: appQuery.getValue('vendor') || 'ServiceNow',
                     install_date: appQuery.getValue('install_date'),
-                    indicators: indicators
+                    indicators: indicators,
+                    product_families: productFamilies
                 });
             }
             
@@ -224,7 +244,8 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                         install_date: app.install_date,
                         needs_update: true,
                         indicators: app.indicators,
-                        is_unavailable: isUnavailable
+                        is_unavailable: isUnavailable,
+                        product_families: app.product_families
                     });
                 }
             }

@@ -18,6 +18,7 @@ export interface StoreApp {
     needs_update: boolean
     indicators: Indicator[]
     is_unavailable: boolean
+    product_families: string[]
 }
 
 export interface BatchInstallResponse {

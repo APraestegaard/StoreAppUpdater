@@ -62,7 +62,10 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                 app.name.toLowerCase().includes(query) ||
                 app.vendor.toLowerCase().includes(query) ||
                 app.version.toLowerCase().includes(query) ||
-                app.latest_version.toLowerCase().includes(query)
+                app.latest_version.toLowerCase().includes(query) ||
+                (app.product_families && app.product_families.some(family => 
+                    family.toLowerCase().includes(query)
+                ))
             )
         }
 
@@ -285,6 +288,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                         <th>Current Version</th>
                         <th>Latest Version</th>
                         <th>Vendor</th>
+                        <th>Product Family</th>
                         <th>Status</th>
                     </tr>
                 </thead>
@@ -327,6 +331,19 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
                             <td className="version">{app.version}</td>
                             <td className="version latest">{app.latest_version}</td>
                             <td className="vendor">{app.vendor}</td>
+                            <td className="product-families">
+                                {app.product_families && app.product_families.length > 0 ? (
+                                    <div className="product-families-container">
+                                        {app.product_families.map((family, index) => (
+                                            <span key={index} className="product-family-badge" title={family}>
+                                                {family}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="no-family">-</span>
+                                )}
+                            </td>
                             <td className="status">
                                 <span className={`status-badge ${getUpdateTypeColor(app.update_type)}`}>
                                     {getUpdateTypeLabel(app.update_type)}
