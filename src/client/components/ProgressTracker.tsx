@@ -12,7 +12,6 @@ interface ProgressTrackerProps {
 
 export default function ProgressTracker({ batchId, executionTrackerId, mode, onComplete, onCancel }: ProgressTrackerProps) {
     const [status, setStatus] = useState<BatchStatusResponse | null>(null)
-    const [isCancelling, setIsCancelling] = useState(false)
     const service = useMemo(() => new StoreAppService(), [])
 
     useEffect(() => {
@@ -174,30 +173,6 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
                             >
                                 View Execution Tracker
                             </a>
-                        </>
-                    )}
-                    {mode === 'user-initiated' && (status.state === 'pending' || status.state === 'ready') && onCancel && (
-                        <>
-                            <span className="separator">•</span>
-                            <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={async () => {
-                                    if (confirm('Are you sure you want to cancel this batch installation? This action cannot be undone.')) {
-                                        setIsCancelling(true)
-                                        try {
-                                            await service.cancelBatchInstallation(batchId)
-                                            onCancel()
-                                        } catch (e) {
-                                            alert('Failed to cancel batch installation.')
-                                        } finally {
-                                            setIsCancelling(false)
-                                        }
-                                    }
-                                }}
-                                disabled={isCancelling}
-                            >
-                                {isCancelling ? 'Cancelling...' : 'Cancel Installation'}
-                            </button>
                         </>
                     )}
                 </div>
