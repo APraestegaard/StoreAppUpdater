@@ -95,27 +95,19 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
         try {
             var result = [];
             var seenApps = {};
-            var buildName = gs.getProperty('glide.buildname', '');
-            
-            if (!buildName) {
-                gs.warn('StoreAppManager - glide.buildname property is empty. Compatibility filtering may be unreliable.');
-            }
             
             var appQuery = new GlideRecord('sys_store_app');
             appQuery.addQuery('install_date', '!=', '');
             appQuery.addQuery('hide_on_ui', false);
+            appQuery.addQuery('update_available', true);
             
             // Build OR condition for vendor field
             var vendorFilter = appQuery.addQuery('vendor', 'ServiceNow');
             vendorFilter.addOrCondition('vendor', '');
             
             appQuery.orderBy('name');
-            appQuery.orderBy('version');
             appQuery.query();
             
-            // Optimization: Collect all app sys_ids first to batch-load versions
-            var appSysIds = [];
-            var appData = [];
             while (appQuery.next()) {
                 var appTitle = appQuery.getValue('name');
                 
@@ -125,9 +117,10 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 }
                 
                 var storeSysId = appQuery.getUniqueValue();
-                appSysIds.push(storeSysId);
+                var installedVer = appQuery.getValue('version');
+                var latestVer = appQuery.getValue('latest_version');
                 
-                // Cache app data for later use
+                // Parse indicators
                 var indicators = [];
                 var indicatorsStr = appQuery.getValue('indicators');
                 if (indicatorsStr) {
@@ -137,7 +130,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                             indicators = parsedIndicators;
                         }
                     } catch (e) {
-                        gs.warn('StoreAppManager - Failed to parse indicators for app: ' + appTitle + ' | Error: ' + e.message);
+                         gs.warn('StoreAppManager - Failed to parse indicators for app: ' + appTitle + ' | Error: ' + e.message);
                     }
                 }
                 
@@ -159,124 +152,28 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                         gs.warn('StoreAppManager - Failed to parse products for app: ' + appTitle + ' | Error: ' + e.message);
                     }
                 }
-                
-                appData.push({
-                    sys_id: storeSysId,
-                    name: appTitle,
-                    version: appQuery.getValue('version'),
-                    latest_version: appQuery.getValue('latest_version'),
-                    assigned_version: appQuery.getValue('assigned_version'),
-                    vendor: appQuery.getValue('vendor') || 'ServiceNow',
-                    install_date: appQuery.getValue('install_date'),
-                    indicators: indicators,
-                    product_families: productFamilies,
-                    update_available: appQuery.getValue('update_available')
-                });
-            }
-            
-            // Optimization: Query ALL sys_app_version records in a single batch query instead of N+1 queries
-            var versionsByAppId = {};
-            if (appSysIds.length > 0) {
-                var versionQuery = new GlideRecord('sys_app_version');
-                versionQuery.addQuery('source_app_id', 'IN', appSysIds.join(','));
-                if (buildName) {
-                    versionQuery.addQuery('compatibilities', 'LIKE', buildName);
-                }
-                versionQuery.orderByDesc('source_app_id');
-                versionQuery.orderByDesc('version');
-                versionQuery.query();
-                
-                // Build a map: app_sys_id -> [versions] (already sorted by version DESC)
-                while (versionQuery.next()) {
-                    var appId = versionQuery.getValue('source_app_id');
-                    if (!versionsByAppId[appId]) {
-                        versionsByAppId[appId] = [];
-                    }
-                    versionsByAppId[appId].push(versionQuery.getValue('version'));
-                }
-            }
-            
-            // Process cached app data with pre-loaded versions
-            for (var i = 0; i < appData.length; i++) {
-                var app = appData[i];
-                var installedVer = app.version;
-                var storeSysId = app.sys_id;
-                var updateAvailableRaw = app.update_available;
-                var hasUpdateFlagData = updateAvailableRaw !== null && updateAvailableRaw !== '';
-                var updateFlagValue = this._stringToBoolean(updateAvailableRaw);
-                var assignedVersion = app.assigned_version;
-                
-                // Find the highest compatible version greater than installed
-                var bestVersion = installedVer;
-                var foundHigher = false;
-                
-                // Check versions from sys_app_version (already sorted DESC by query)
-                if (versionsByAppId[storeSysId]) {
-                    for (var j = 0; j < versionsByAppId[storeSysId].length; j++) {
-                        var candidate = versionsByAppId[storeSysId][j];
-                        if (candidate !== installedVer && this._versionCompare(candidate, bestVersion) === 1) {
-                            bestVersion = candidate;
-                            foundHigher = true;
-                            break; // Found highest, exit loop
-                        }
-                    }
-                }
-                
-                // If no compatible version found in sys_app_version, fallback to latest_version
-                if (!foundHigher) {
-                    var latestVer = app.latest_version;
-                    if (latestVer && this._versionCompare(latestVer, installedVer) === 1) {
-                        bestVersion = latestVer;
-                        foundHigher = true;
-                    } else if (assignedVersion && this._versionCompare(assignedVersion, installedVer) === 1) {
-                        bestVersion = assignedVersion;
-                        foundHigher = true;
-                    }
-                }
-                
-                var includeApp = false;
-                if (hasUpdateFlagData) {
-                    includeApp = updateFlagValue;
-                    if (includeApp && !foundHigher) {
-                        var versionHint = app.latest_version || assignedVersion;
-                        if (versionHint && this._versionCompare(versionHint, installedVer) === 1) {
-                            bestVersion = versionHint;
-                            foundHigher = true;
-                        }
-                    }
-                } else {
-                    includeApp = foundHigher;
-                }
-                
-                if (!includeApp) {
-                    continue;
-                }
-                
-                if (!foundHigher && includeApp) {
-                    bestVersion = app.latest_version || assignedVersion || installedVer;
-                }
 
                 // Determine update type (Major/Minor/Patch)
-                var updateType = this._determineUpdateType(installedVer, bestVersion);
+                var updateType = this._determineUpdateType(installedVer, latestVer);
                 
                 // Check if app has unavailability indicator
-                var isUnavailable = this._hasIndicatorWithId(app.indicators, 'not_available_for_instance_type');
+                var isUnavailable = this._hasIndicatorWithId(indicators, 'not_available_for_instance_type');
                 
                 // Mark as processed and build result object
-                seenApps[app.name] = true;
+                seenApps[appTitle] = true;
                 result.push({
                     sys_id: storeSysId,
-                    name: app.name,
+                    name: appTitle,
                     version: installedVer,
-                    latest_version: bestVersion,
+                    latest_version: latestVer,
                     update_type: updateType,
-                    vendor: app.vendor,
-                    install_date: app.install_date,
-                    needs_update: includeApp,
-                    update_available: includeApp,
-                    indicators: app.indicators,
+                    vendor: appQuery.getValue('vendor') || 'ServiceNow',
+                    install_date: appQuery.getValue('install_date'),
+                    needs_update: true,
+                    update_available: true,
+                    indicators: indicators,
                     is_unavailable: isUnavailable,
-                    product_families: app.product_families
+                    product_families: productFamilies
                 });
             }
             
