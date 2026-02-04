@@ -101,10 +101,6 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             appQuery.addQuery('hide_on_ui', false);
             appQuery.addQuery('update_available', true);
             
-            // Build OR condition for vendor field
-            var vendorFilter = appQuery.addQuery('vendor', 'ServiceNow');
-            vendorFilter.addOrCondition('vendor', '');
-            
             appQuery.orderBy('name');
             appQuery.query();
             
