@@ -5,6 +5,7 @@ import AppListTable from './components/AppListTable'
 import ActionBar from './components/ActionBar'
 import ProgressTracker from './components/ProgressTracker'
 import ConfirmationModal from './components/ConfirmationModal'
+import ConfirmationAlertModal from './components/ConfirmationAlertModal'
 import BatchHistory from './components/BatchHistory'
 import SkeletonTable from './components/SkeletonTable'
 import './app.css'
@@ -22,6 +23,7 @@ export default function App() {
     const [showConfirmModal, setShowConfirmModal] = useState(false)
     const [pendingUpdateApps, setPendingUpdateApps] = useState<StoreApp[]>([])
     const [showUnavailableApps, setShowUnavailableApps] = useState(false)
+    const [showCheckUpdatesConfirm, setShowCheckUpdatesConfirm] = useState(false)
     const [batchInProgress, setBatchInProgress] = useState<{
         inProgress: boolean
         batchName?: string
@@ -144,13 +146,11 @@ export default function App() {
     }
 
     const handleCheckUpdates = async () => {
-        if (
-            !confirm(
-                'Checking for updates may take several minutes. The page will remain responsive. Continue?'
-            )
-        ) {
-            return
-        }
+        setShowCheckUpdatesConfirm(true)
+    }
+
+    const handleConfirmCheckUpdates = async () => {
+        setShowCheckUpdatesConfirm(false)
 
         try {
             setIsCheckingUpdates(true)
@@ -229,12 +229,23 @@ export default function App() {
             </header>
 
             <main className="app-content">
-                {/* Confirmation Modal */}
+                {/* Confirmation Modal for app updates */}
                 <ConfirmationModal
                     apps={pendingUpdateApps}
                     onConfirm={handleConfirmUpdate}
                     onCancel={handleCancelUpdate}
                     isVisible={showConfirmModal}
+                />
+                
+                {/* Confirmation Alert Modal for check updates */}
+                <ConfirmationAlertModal
+                    title="Check for Updates"
+                    message="Checking for updates may take several minutes. The page will remain responsive. Continue?"
+                    onConfirm={handleConfirmCheckUpdates}
+                    onCancel={() => setShowCheckUpdatesConfirm(false)}
+                    isVisible={showCheckUpdatesConfirm}
+                    confirmText="Check for Updates"
+                    cancelText="Cancel"
                 />
                 
                 {batchInProgress?.inProgress && (

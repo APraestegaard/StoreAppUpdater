@@ -222,6 +222,21 @@ body {
     background-color: #e8ecee;
 }
 
+.btn-danger {
+    background-color: #c9252d;
+    color: #fff;
+    border-color: #c9252d;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: #a81f24;
+    border-color: #a81f24;
+}
+
+.btn-danger:active:not(:disabled) {
+    background-color: #8d1a1f;
+}
+
 .btn-sm {
     padding: 4px 10px;
     font-size: 12px;
@@ -961,6 +976,13 @@ body {
     margin: 0 0 20px 0;
     font-size: 14px;
     color: #5a6c72;
+}
+
+.modal-message {
+    margin: 0;
+    font-size: 14px;
+    color: #5a6c72;
+    line-height: 1.6;
 }
 
 .apps-list {
