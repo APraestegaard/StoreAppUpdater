@@ -179,8 +179,37 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     indicators: indicators,
                     is_unavailable: isUnavailable,
                     product_families: productFamilies,
-                    dependencies: appQuery.getValue('dependencies')
+                    dependencies: appQuery.getValue('dependencies'),
+                    is_blocked: false
                 });
+            }
+            
+            // Optimization: check for blocked versions in batch
+            if (result.length > 0) {
+                var appIds = [];
+                for (var i = 0; i < result.length; i++) {
+                    appIds.push(result[i].sys_id);
+                }
+                
+                var blockedQuery = new GlideRecord('sys_app_version');
+                blockedQuery.addQuery('source_app_id', 'IN', appIds.join(','));
+                blockedQuery.addQuery('block_install', true);
+                blockedQuery.query();
+                
+                var blockedMap = {};
+                while (blockedQuery.next()) {
+                    var sId = blockedQuery.getValue('source_app_id');
+                    var ver = blockedQuery.getValue('version');
+                    if (!blockedMap[sId]) blockedMap[sId] = {};
+                    blockedMap[sId][ver] = true;
+                }
+                
+                for (var j = 0; j < result.length; j++) {
+                    var item = result[j];
+                    if (blockedMap[item.sys_id] && blockedMap[item.sys_id][item.latest_version]) {
+                        item.is_blocked = true;
+                    }
+                }
             }
             
             return JSON.stringify(result);
