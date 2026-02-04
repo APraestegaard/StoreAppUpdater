@@ -113,7 +113,9 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             appQuery.orderBy('version');
             appQuery.query();
             
-            // Process query results
+            // Optimization: Collect all app sys_ids first to batch-load versions
+            var appSysIds = [];
+            var appData = [];
             while (appQuery.next()) {
                 var appTitle = appQuery.getValue('name');
                 
@@ -122,36 +124,67 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     continue;
                 }
                 
-                var installedVer = appQuery.getValue('version');
                 var storeSysId = appQuery.getUniqueValue();
+                appSysIds.push(storeSysId);
                 
-                // Query sys_app_version for compatible versions (optimized with orderByDesc and setLimit)
+                // Cache app data for later use
+                appData.push({
+                    sys_id: storeSysId,
+                    name: appTitle,
+                    version: appQuery.getValue('version'),
+                    latest_version: appQuery.getValue('latest_version'),
+                    vendor: appQuery.getValue('vendor') || 'ServiceNow',
+                    install_date: appQuery.getValue('install_date')
+                });
+            }
+            
+            // Optimization: Query ALL sys_app_version records in a single batch query instead of N+1 queries
+            var versionsByAppId = {};
+            if (appSysIds.length > 0) {
                 var versionQuery = new GlideRecord('sys_app_version');
-                versionQuery.addQuery('source_app_id', storeSysId);
+                versionQuery.addQuery('source_app_id', 'IN', appSysIds.join(','));
                 if (buildName) {
                     versionQuery.addQuery('compatibilities', 'LIKE', buildName);
                 }
-                versionQuery.addQuery('version', '!=', installedVer);
+                versionQuery.orderByDesc('source_app_id');
                 versionQuery.orderByDesc('version');
-                versionQuery.setLimit(1); // Get only the highest version from database
                 versionQuery.query();
+                
+                // Build a map: app_sys_id -> [versions] (already sorted by version DESC)
+                while (versionQuery.next()) {
+                    var appId = versionQuery.getValue('source_app_id');
+                    if (!versionsByAppId[appId]) {
+                        versionsByAppId[appId] = [];
+                    }
+                    versionsByAppId[appId].push(versionQuery.getValue('version'));
+                }
+            }
+            
+            // Process cached app data with pre-loaded versions
+            for (var i = 0; i < appData.length; i++) {
+                var app = appData[i];
+                var installedVer = app.version;
+                var storeSysId = app.sys_id;
                 
                 // Find the highest compatible version greater than installed
                 var bestVersion = installedVer;
                 var foundHigher = false;
                 
-                // Process only the top version record from database (setLimit optimization)
-                if (versionQuery.next()) {
-                    var candidate = versionQuery.getValue('version');
-                    if (this._versionCompare(candidate, bestVersion) === 1) {
-                        bestVersion = candidate;
-                        foundHigher = true;
+                // Check versions from sys_app_version (already sorted DESC by query)
+                if (versionsByAppId[storeSysId]) {
+                    for (var j = 0; j < versionsByAppId[storeSysId].length; j++) {
+                        var candidate = versionsByAppId[storeSysId][j];
+                        if (candidate !== installedVer && this._versionCompare(candidate, bestVersion) === 1) {
+                            bestVersion = candidate;
+                            foundHigher = true;
+                            break; // Found highest, exit loop
+                        }
                     }
                 }
                 
                 // If no compatible version found in sys_app_version, fallback to latest_version
                 if (!foundHigher) {
-                    var latestVer = appQuery.getValue('latest_version');
+                    var latestVer = app.latest_version;
                     if (latestVer && this._versionCompare(latestVer, installedVer) === 1) {
                         bestVersion = latestVer;
                         foundHigher = true;
@@ -163,15 +196,15 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     var updateType = this._determineUpdateType(installedVer, bestVersion);
                     
                     // Mark as processed and build result object
-                    seenApps[appTitle] = true;
+                    seenApps[app.name] = true;
                     result.push({
                         sys_id: storeSysId,
-                        name: appTitle,
+                        name: app.name,
                         version: installedVer,
                         latest_version: bestVersion,
                         update_type: updateType,
-                        vendor: appQuery.getValue('vendor') || 'ServiceNow',
-                        install_date: appQuery.getValue('install_date'),
+                        vendor: app.vendor,
+                        install_date: app.install_date,
                         needs_update: true
                     });
                 }
