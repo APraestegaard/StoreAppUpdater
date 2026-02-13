@@ -58,7 +58,7 @@ const ActionBar = memo(function ActionBar({
                     type="button"
                     aria-busy={isCheckingUpdates}
                 >
-                    {isCheckingUpdates ? '⟳ Checking...' : 'Check for Updates'}
+                    {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
                 </button>
                 <button
                     onClick={onRefresh}
