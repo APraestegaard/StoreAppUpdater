@@ -47,7 +47,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             });
             
         } catch (e) {
-            gs.error('StoreAppManager - checkBatchInProgress error: ' + e.message + ' | Stack: ' + e.stack);
+            gs.error('StoreAppManager - checkBatchInProgress: ' + e.message);
             return JSON.stringify({
                 inProgress: false,
                 error: e.message
@@ -64,7 +64,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             var result = [];
             var grBatch = new GlideRecord('sys_batch_install_plan');
             grBatch.orderByDesc('sys_created_on');
-            grBatch.setLimit(10); // Get last 10 batch installations
+            grBatch.setLimit(10);
             grBatch.query();
             
             while (grBatch.next()) {
@@ -82,7 +82,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             return JSON.stringify(result);
             
         } catch (e) {
-            gs.error('StoreAppManager - getBatchHistory error: ' + e.message + ' | Stack: ' + e.stack);
+            gs.error('StoreAppManager - getBatchHistory: ' + e.message);
             return JSON.stringify([]);
         }
     },
@@ -101,14 +101,12 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             appQuery.addQuery('hide_on_ui', false);
             appQuery.addQuery('update_available', true);
             appQuery.addActiveQuery();
-            
             appQuery.orderBy('name');
             appQuery.query();
             
             while (appQuery.next()) {
                 var appTitle = appQuery.getValue('name');
                 
-                // Skip if already processed
                 if (seenApps.hasOwnProperty(appTitle)) {
                     continue;
                 }
@@ -121,51 +119,32 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     continue;
                 }
 
-                // Parse indicators
-                var indicators = [];
-                var indicatorsStr = appQuery.getValue('indicators');
-                if (indicatorsStr) {
-                    try {
-                        var parsedIndicators = JSON.parse(indicatorsStr);
-                        if (Array.isArray(parsedIndicators)) {
-                            indicators = parsedIndicators;
-                        }
-                    } catch (e) {
-                         gs.warn('StoreAppManager - Failed to parse indicators for app: ' + appTitle + ' | Error: ' + e.message);
-                    }
-                }
-
+                var indicators = this._parseJSON(appQuery.getValue('indicators'), []);
+                
                 if (this._hasIndicatorWithId(indicators, 'not_licensed')) {
                     continue;
                 }
                 
-                // Parse products field to extract product families
-                var productFamilies = [];
-                var productsStr = appQuery.getValue('products');
-                if (productsStr) {
-                    try {
-                        var parsedProducts = JSON.parse(productsStr);
-                        if (Array.isArray(parsedProducts)) {
-                            for (var k = 0; k < parsedProducts.length; k++) {
-                                var product = parsedProducts[k];
-                                if (product.productFamily) {
-                                    productFamilies.push(product.productFamily);
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        gs.warn('StoreAppManager - Failed to parse products for app: ' + appTitle + ' | Error: ' + e.message);
-                    }
-                }
-
-                // Determine update type (Major/Minor/Patch)
+                var productFamilies = this._extractProductFamilies(appQuery.getValue('products'));
                 var updateType = this._determineUpdateType(installedVer, latestVer);
                 
-                // Check if app has unavailability indicator (e.g., incompatible or not available for instance type)
-                var isUnavailable = this._hasIndicatorWithId(indicators, 'not_available_for_instance_type') || 
-                                   this._hasIndicatorWithId(indicators, 'incompatible');
+                var criticalIndicators = [
+                    'not_available_for_instance_type',
+                    'incompatible',
+                    'entitlement_revoked',
+                    'trial_deactivation_requested'
+                ];
                 
-                // Mark as processed and build result object
+                var unavailableReasons = [];
+                for (var idx = 0; idx < criticalIndicators.length; idx++) {
+                    if (this._hasIndicatorWithId(indicators, criticalIndicators[idx])) {
+                        var reason = this._getIndicatorMessage(indicators, criticalIndicators[idx]);
+                        if (reason) {
+                            unavailableReasons.push(reason);
+                        }
+                    }
+                }
+                
                 seenApps[appTitle] = true;
                 result.push({
                     sys_id: storeSysId,
@@ -178,19 +157,15 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     needs_update: true,
                     update_available: true,
                     indicators: indicators,
-                    is_unavailable: isUnavailable,
+                    is_unavailable: unavailableReasons.length > 0,
+                    unavailable_reason: unavailableReasons.length > 0 ? unavailableReasons.join('; ') : null,
                     product_families: productFamilies,
-                    dependencies: appQuery.getValue('dependencies'),
-                    is_blocked: false
+                    dependencies: appQuery.getValue('dependencies')
                 });
             }
             
-            // Optimization: check for blocked versions in batch
             if (result.length > 0) {
-                var appIds = [];
-                for (var i = 0; i < result.length; i++) {
-                    appIds.push(result[i].sys_id);
-                }
+                var appIds = result.map(function(app) { return app.sys_id; });
                 
                 var blockedQuery = new GlideRecord('sys_app_version');
                 blockedQuery.addQuery('source_app_id', 'IN', appIds.join(','));
@@ -201,21 +176,30 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 while (blockedQuery.next()) {
                     var sId = blockedQuery.getValue('source_app_id');
                     var ver = blockedQuery.getValue('version');
+                    var blockMsg = blockedQuery.getValue('block_message') || 'This version is blocked from installation';
                     if (!blockedMap[sId]) blockedMap[sId] = {};
-                    blockedMap[sId][ver] = true;
+                    blockedMap[sId][ver] = blockMsg;
                 }
                 
                 for (var j = 0; j < result.length; j++) {
                     var item = result[j];
                     if (blockedMap[item.sys_id] && blockedMap[item.sys_id][item.latest_version]) {
-                        item.is_blocked = true;
+                        item.is_unavailable = true;
+                        var blockReason = blockedMap[item.sys_id][item.latest_version];
+                        if (blockReason && typeof blockReason === 'string' && blockReason.trim()) {
+                            var trimmedReason = blockReason.trim();
+                            item.unavailable_reason = item.unavailable_reason ? 
+                                item.unavailable_reason + '; ' + trimmedReason : trimmedReason;
+                        } else if (!item.unavailable_reason) {
+                            item.unavailable_reason = 'This version cannot be installed';
+                        }
                     }
                 }
             }
             
             return JSON.stringify(result);
         } catch (e) {
-            gs.error('StoreAppManager - getAppsNeedingUpdate error: ' + e.message + ' | Stack: ' + e.stack);
+            gs.error('StoreAppManager - getAppsNeedingUpdate: ' + e.message);
             return JSON.stringify([]);
         }
     },
@@ -245,7 +229,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 message: 'Successfully checked for updates. Refresh the list to see new updates.'
             });
         } catch (e) {
-            gs.error('StoreAppManager - checkForUpdates error: ' + e.message + ' | Stack: ' + e.stack);
+            gs.error('StoreAppManager - checkForUpdates: ' + e.message);
             return JSON.stringify({
                 success: false,
                 message: 'Error checking for updates: ' + e.message
@@ -326,42 +310,56 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 });
             }
             
-            gs.info('StoreAppManager - updateSelectedApps: Starting batch update for ' + appsToUpdate.length + ' app(s) by user ' + gs.getUserName());
+            gs.info('StoreAppManager - updateSelectedApps: Starting batch update for ' + appsToUpdate.length + ' app(s)');
             
-            // Build package list for batch upgrade (AppUpgrader format)
             var packages = [];
-
-            // Optimization: Collect all sys_ids to perform a single batch query for version validation
-            var appSysIds = [];
-            for (var i = 0; i < appsToUpdate.length; i++) {
-                if (appsToUpdate[i].sys_id) {
-                    appSysIds.push(appsToUpdate[i].sys_id);
-                }
-            }
-            
-            // Map of sys_id -> current installed version
+            var appSysIds = appsToUpdate.map(function(app) { return app.sys_id; }).filter(function(id) { return id; });
             var currentVersions = {};
             var unavailableApps = {};
+            var targetVersions = {};
             
             if (appSysIds.length > 0) {
                 var storeAppGr = new GlideRecord('sys_store_app');
                 storeAppGr.addQuery('sys_id', 'IN', appSysIds.join(','));
                 storeAppGr.query();
+                
                 while (storeAppGr.next()) {
                     var sId = storeAppGr.getUniqueValue();
                     currentVersions[sId] = (storeAppGr.getValue('version') || '').toString().trim();
                     
-                    // Check availability
-                    var indicatorsStr = storeAppGr.getValue('indicators');
-                    if (indicatorsStr) {
-                        try {
-                            var inds = JSON.parse(indicatorsStr);
-                            if (this._hasIndicatorWithId(inds, 'not_available_for_instance_type') || 
-                                this._hasIndicatorWithId(inds, 'incompatible')) {
-                                unavailableApps[sId] = true;
-                            }
-                        } catch(e) {
-                            gs.warn('StoreAppManager - Failed to parse indicators for validation: ' + e.message);
+                    var indicators = this._parseJSON(storeAppGr.getValue('indicators'), []);
+                    var criticalIndicators = [
+                        'not_available_for_instance_type',
+                        'incompatible',
+                        'entitlement_revoked',
+                        'trial_deactivation_requested'
+                    ];
+                    
+                    for (var ci = 0; ci < criticalIndicators.length; ci++) {
+                        if (this._hasIndicatorWithId(indicators, criticalIndicators[ci])) {
+                            unavailableApps[sId] = this._getIndicatorMessage(indicators, criticalIndicators[ci]) || 'App unavailable for update';
+                            break;
+                        }
+                    }
+                }
+                
+                for (var tv = 0; tv < appsToUpdate.length; tv++) {
+                    if (appsToUpdate[tv].sys_id && appsToUpdate[tv].latest_version) {
+                        targetVersions[appsToUpdate[tv].sys_id] = appsToUpdate[tv].latest_version;
+                    }
+                }
+                
+                if (Object.keys(targetVersions).length > 0) {
+                    var blockedQuery = new GlideRecord('sys_app_version');
+                    blockedQuery.addQuery('source_app_id', 'IN', Object.keys(targetVersions).join(','));
+                    blockedQuery.addQuery('block_install', true);
+                    blockedQuery.query();
+                    
+                    while (blockedQuery.next()) {
+                        var appId = blockedQuery.getValue('source_app_id');
+                        if (targetVersions[appId] === blockedQuery.getValue('version')) {
+                            var blockMsg = blockedQuery.getValue('block_message') || 'Target version is blocked from installation';
+                            unavailableApps[appId] = blockMsg;
                         }
                     }
                 }
@@ -370,24 +368,26 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             for (var i = 0; i < appsToUpdate.length; i++) {
                 var app = appsToUpdate[i];
                 
-                // Validate each app has required fields
                 if (!app.sys_id || !app.name || !app.latest_version) {
-                    gs.warn('StoreAppManager - updateSelectedApps: Invalid app object at index ' + i + ': ' + JSON.stringify(app));
-                    continue; // Skip invalid apps
+                    gs.warn('StoreAppManager - Invalid app object: ' + app.name);
+                    continue;
                 }
 
-                // Verify upgrade necessity against current DB record
-                // This prevents "INVALID" batch states caused by including apps that are already up to date
                 var installedVersion = currentVersions[app.sys_id];
                 var requestedVersion = (app.latest_version || '').toString().trim();
                 
                 if (unavailableApps[app.sys_id]) {
-                    gs.info('StoreAppManager - Skipping unavailable/incompatible app: {0}', app.name);
+                    gs.info('StoreAppManager - Skipping unavailable app: ' + app.name);
+                    continue;
+                }
+                
+                if (app.is_unavailable === true) {
+                    gs.info('StoreAppManager - Skipping app marked unavailable: ' + app.name);
                     continue;
                 }
 
                 if (installedVersion && installedVersion === requestedVersion) {
-                    gs.info('StoreAppManager - Skipping app {0} as it is already on version {1}', app.name, installedVersion);
+                    gs.info('StoreAppManager - Skipping app already current: ' + app.name);
                     continue;
                 }
                 
@@ -398,81 +398,61 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     type: 'application',
                     requested_version: app.latest_version
                 });
-                
-                gs.info('StoreAppManager - Adding to batch: ' + app.name + ' (' + app.version + ' -> ' + app.latest_version + ')');
             }
             
             if (packages.length === 0) {
-                gs.error('StoreAppManager - updateSelectedApps: No valid packages after validation');
                 return JSON.stringify({
                     success: false,
-                    error: 'No valid applications found to update after validation. Please check the application data.'
+                    error: 'No valid applications found to update after validation.'
                 });
             }
             
-            // Prepare batch request payload
             var batchPayload = new global.JSON().encode({
                 packages: packages,
                 name: 'Store App Updates - ' + packages.length + ' app(s)'
             });
             
-            gs.debug('StoreAppManager - Batch payload: ' + batchPayload);
-            
-            // Execute batch upgrade using AppUpgrader (designed for updates)
             var upgradeResponse = new sn_appclient.AppUpgrader().installBatch(batchPayload);
             
             if (!upgradeResponse) {
-                gs.error('StoreAppManager - updateSelectedApps: AppUpgrader.installBatch() returned null');
                 return JSON.stringify({
                     success: false,
-                    error: 'Failed to start batch installation. There may be another batch installation already in progress, or the batch installer service is unavailable.'
+                    error: 'Failed to start batch installation. Another batch may be in progress.'
                 });
             }
             
-            // Parse and validate response
             var responseData;
             try {
                 responseData = JSON.parse(upgradeResponse);
             } catch (err) {
-                gs.error('StoreAppManager - Failed to parse installBatch response: ' + upgradeResponse + ' | Error: ' + err.message);
+                gs.error('StoreAppManager - Failed to parse installBatch response: ' + err.message);
                 return JSON.stringify({
                     success: false,
-                    error: 'Failed to parse batch installation response. The installation may have started but status is unclear. Please check sys_batch_install_plan table.'
+                    error: 'Failed to parse batch installation response.'
                 });
             }
             
-            // Check for required fields
             var batchId = responseData && responseData.batch_installation_id;
             if (!batchId) {
-                gs.error('StoreAppManager - Invalid installBatch response (missing batch_installation_id): ' + upgradeResponse);
                 return JSON.stringify({
                     success: false,
-                    error: 'Invalid batch installation response. Missing batch installation ID. The installation may not have started correctly.'
+                    error: 'Invalid batch installation response. Missing batch ID.'
                 });
             }
             
-            gs.info('StoreAppManager - Batch installation started successfully. Batch ID: ' + batchId);
+            gs.info('StoreAppManager - Batch installation started: ' + batchId);
             
-            // Update batch plan notes with helpful information
             var planRecord = new GlideRecord('sys_batch_install_plan');
             if (planRecord.get(batchId)) {
-                planRecord.setValue('notes', [
-                    'Batch installation created by Store App Manager.',
-                    '',
-                    'It may take some time for the apps to all populate in the related list below.',
-                    'You can refresh the list as needed to see them populating.',
-                    '',
-                    'After all apps have populated, the install will start and the State will change to In progress.',
-                    '',
-                    'When the batch is done, the state will update to Installed.',
-                    '',
-                    'Applications in this batch:',
-                    packages.map(function(pkg) { return '  - ' + pkg.displayName + ' (v' + pkg.requested_version + ')'; }).join('\n')
-                ].join('\n'));
+                var appList = packages.map(function(pkg) { 
+                    return '  - ' + pkg.displayName + ' (v' + pkg.requested_version + ')'; 
+                }).join('\n');
+                
+                planRecord.setValue('notes', 
+                    'Batch installation created by Store App Manager.\n\n' +
+                    'Applications in this batch:\n' + appList
+                );
                 planRecord.update();
-                gs.debug('StoreAppManager - Updated batch plan notes for batch ' + batchId);
-            } else {
-                gs.warn('StoreAppManager - Could not find batch plan record to update notes: ' + batchId);
             }
             
             return JSON.stringify({
@@ -482,25 +462,19 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             });
             
         } catch (ex) {
-            gs.error('StoreAppManager - updateSelectedApps error: ' + ex.message + ' | Stack: ' + ex.stack);
+            gs.error('StoreAppManager - updateSelectedApps: ' + ex.message);
             return JSON.stringify({
                 success: false,
-                error: 'An unexpected error occurred while starting the batch installation: ' + ex.message
+                error: 'An unexpected error occurred: ' + ex.message
             });
         }
     },
     
-    /**
-     * Get batch install status
-     * @param batchId - sys_batch_install_plan sys_id
-     */
     getBatchStatus: function() {
         try {
             var batchSysId = this.getParameter('sysparm_batch_id');
             
-            // Input validation for batch ID
             if (!batchSysId || !this._isValidSysId(batchSysId)) {
-                gs.warn('StoreAppManager - getBatchStatus: Invalid batch ID provided: ' + batchSysId);
                 return JSON.stringify({
                     state: this.BATCH_STATES.ERROR,
                     progress: 0,
@@ -512,7 +486,6 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             
             var planQuery = new GlideRecord('sys_batch_install_plan');
             if (!planQuery.get(batchSysId)) {
-                gs.warn('StoreAppManager - getBatchStatus: Batch plan not found: ' + batchSysId);
                 return JSON.stringify({
                     state: this.BATCH_STATES.NOT_FOUND,
                     progress: 0,
@@ -522,45 +495,31 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                 });
             }
             
-            var statusInfo = {
-                state: planQuery.getValue('state'),
-                errorMsg: planQuery.getValue('error_message')
-            };
-            
-            // Use GlideAggregate for efficient counting
             var totalItems = this._countBatchItems(batchSysId);
             var doneItems = this._countBatchItems(batchSysId, this.ITEM_STATES.INSTALLED);
-            
-            // Find the currently installing app
             var currentApp = this._getCurrentInstallingApp(batchSysId);
+            var state = planQuery.getValue('state');
             
-            // Calculate progress percentage
             var progressPct = (totalItems > 0) ? Math.round((doneItems * 100) / totalItems) : 0;
             
-            // Force 100% completion when batch state is installed
-            if (statusInfo.state === this.BATCH_STATES.INSTALLED) {
+            if (state === this.BATCH_STATES.INSTALLED) {
                 progressPct = 100;
                 doneItems = totalItems;
-                currentApp = null; // No current app when complete
+                currentApp = null;
             }
             
-            gs.debug('StoreAppManager - getBatchStatus: Batch ' + batchSysId + 
-                   ' - State: ' + statusInfo.state + 
-                   ', Progress: ' + progressPct + '% (' + doneItems + '/' + totalItems + ')' +
-                   (currentApp ? ', Current: ' + currentApp.display : ''));
-            
             return JSON.stringify({
-                state: statusInfo.state,
+                state: state,
                 progress: progressPct,
                 total_apps: totalItems,
                 completed_apps: doneItems,
                 current_app_name: currentApp ? currentApp.name : null,
                 current_app_display: currentApp ? currentApp.display : null,
-                error_message: statusInfo.errorMsg
+                error_message: planQuery.getValue('error_message')
             });
             
         } catch (ex) {
-            gs.error('StoreAppManager - getBatchStatus error: ' + ex.message + ' | Stack: ' + ex.stack);
+            gs.error('StoreAppManager - getBatchStatus: ' + ex.message);
             return JSON.stringify({
                 state: this.BATCH_STATES.ERROR,
                 progress: 0,
@@ -630,10 +589,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
     },
     
     /**
-     * Helper to check if indicators array contains specific ID
-     * @param indicators - array of indicator objects
-     * @param id - indicator ID to check
-     * @returns boolean
+     * Check if indicators array contains specific ID
      */
     _hasIndicatorWithId: function(indicators, id) {
         if (!indicators || !Array.isArray(indicators)) {
@@ -645,6 +601,21 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             }
         }
         return false;
+    },
+    
+    /**
+     * Get the message from a specific indicator
+     */
+    _getIndicatorMessage: function(indicators, id) {
+        if (!indicators || !Array.isArray(indicators)) {
+            return null;
+        }
+        for (var i = 0; i < indicators.length; i++) {
+            if (indicators[i] && indicators[i].id === id) {
+                return indicators[i].message || indicators[i].tooltip || id;
+            }
+        }
+        return null;
     },
 
     /**
@@ -681,16 +652,42 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             return 'Patch';
             
         } catch (e) {
-            gs.warn('StoreAppManager - _determineUpdateType error: ' + e.message + ' | currentVer: ' + currentVer + ', newVer: ' + newVer);
-            return 'Patch'; // Default fallback
+            gs.warn('StoreAppManager - _determineUpdateType error: ' + e.message);
+            return 'Patch';
         }
     },
     
     /**
-     * Convert common string representations to boolean
-     * @param value - string/boolean/null from GlideRecord
-     * @returns boolean true when value represents true, otherwise false
+     * Parse JSON string safely with fallback
+     * @param jsonString - JSON string to parse
+     * @param defaultValue - Value to return if parsing fails
+     * @returns parsed object or defaultValue
      */
+    _parseJSON: function(jsonString, defaultValue) {
+        if (!jsonString) return defaultValue;
+        try {
+            var parsed = JSON.parse(jsonString);
+            return Array.isArray(parsed) ? parsed : defaultValue;
+        } catch (e) {
+            return defaultValue;
+        }
+    },
+    
+    /**
+     * Extract product families from products JSON
+     * @param productsStr - JSON string of products
+     * @returns array of product family names
+     */
+    _extractProductFamilies: function(productsStr) {
+        var products = this._parseJSON(productsStr, []);
+        var families = [];
+        for (var i = 0; i < products.length; i++) {
+            if (products[i].productFamily) {
+                families.push(products[i].productFamily);
+            }
+        }
+        return families;
+    },
     
     type: 'StoreAppManager'
 });

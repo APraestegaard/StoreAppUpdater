@@ -319,7 +319,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                                     onChange={handleSelectChange(app.sys_id, app.is_unavailable)}
                                     disabled={app.is_unavailable}
                                     aria-label={`Select ${app.name}${app.is_unavailable ? ' (unavailable)' : ''}`}
-                                    title={app.is_unavailable ? 'This application cannot be installed on this instance type' : ''}
+                                    title={app.is_unavailable ? (app.unavailable_reason || 'This application cannot be updated on this instance') : `Select ${app.name} for batch update`}
                                 />
                             </td>
                             <td className="app-name">
@@ -327,7 +327,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                                     {app.is_unavailable && (
                                         <span 
                                             className="indicator-icon" 
-                                            title={app.indicators.find(ind => ind.id === 'not_available_for_instance_type')?.tooltip || 'Unavailable'}
+                                            title={app.unavailable_reason || app.indicators.find(ind => ind.id === 'not_available_for_instance_type')?.tooltip || 'This application cannot be updated on this instance'}
                                         >
                                             [Unavailable]
                                         </span>

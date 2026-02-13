@@ -19,6 +19,7 @@ export interface StoreApp {
     update_available: boolean
     indicators: Indicator[]
     is_unavailable: boolean
+    unavailable_reason?: string | null
     product_families: string[]
 }
 
