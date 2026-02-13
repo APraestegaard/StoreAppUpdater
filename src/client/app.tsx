@@ -52,6 +52,28 @@ export default function App() {
         void checkForBatchInProgress()
     }, [])
 
+    // Auto-dismiss success messages after 5 seconds
+    useEffect(() => {
+        if (success) {
+            const timer = setTimeout(() => {
+                setSuccess(null)
+            }, 5000)
+            
+            return () => clearTimeout(timer)
+        }
+    }, [success])
+
+    // Auto-dismiss error messages after 8 seconds (longer for errors)
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => {
+                setError(null)
+            }, 8000)
+            
+            return () => clearTimeout(timer)
+        }
+    }, [error])
+
     const checkForBatchInProgress = async () => {
         try {
             const status = await service.checkBatchInProgress()
