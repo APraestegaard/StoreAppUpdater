@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { StoreApp } from '../types'
 
 interface AppListTableProps {
@@ -82,6 +82,11 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
             Patch: availableApps.filter(app => app.update_type === 'Patch').length
         }
     }, [apps])
+
+    // Reset to first page when availability filter changes
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [showUnavailableApps])
 
     // Calculate pagination
     const totalPages = Math.ceil(filteredApps.length / pageSize)
