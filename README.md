@@ -2,19 +2,18 @@
 
 ![Version](https://img.shields.io/badge/version-0.0.1-blue) ![ServiceNow](https://img.shields.io/badge/ServiceNow-Fluent%20SDK%204.2-green) ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-Stop manually updating ServiceNow Store apps one-by-one. **Store App Update Manager** brings batch operations, real-time progress tracking, and smart conflict detection to your ServiceNow instance—all in a modern React interface.
+Update multiple ServiceNow Store apps with one click. **Store App Update Manager** brings batch operations, real-time progress tracking, and intelligent safety checks to your instance—built with React, TypeScript, and ServiceNow Fluent SDK.
 
 ## Why Use This?
 
-Managing store app updates in ServiceNow is tedious: navigating multiple screens, manually checking versions, and babysitting installations. This tool solves that.
+Updating apps manually wastes time: clicking through screens, checking versions one-by-one, waiting for installations. This tool automates the entire workflow.
 
-**What You Get:**
-- **Batch Updates**: Update multiple apps with one click—no more repetitive manual work
-- **Live Progress**: Real-time tracking shows exactly what's happening during updates
-- **Smart Search**: Instantly filter hundreds of apps by name, vendor, or version
-- **Conflict Detection**: Automatically detects and prevents conflicting batch installations
-- **Installation History**: Full audit trail of past batch updates with timestamps and status
-- **Native Design**: Seamlessly integrated with ServiceNow's UI—feels like it belongs there
+**Key Benefits:**
+- **Batch Updates**: Update 5, 10, or 50 apps at once—saves hours during maintenance windows
+- **Safety First**: Detects unavailable apps, blocked versions, and installation conflicts before you click update
+- **Live Progress**: Real-time tracking with completion percentages and direct links to batch plans
+- **Smart Filtering**: Instant search across names, vendors, versions—plus filter by update type (Major/Minor/Patch)
+- **Audit Trail**: Complete history of all batch operations with timestamps and detailed notes
 
 ## Quick Start
 
@@ -36,46 +35,54 @@ npm run deploy
 
 **Access the app:** Navigate to **Store App Manager > Update Manager** in your instance.
 
-## Key Features
+## Features
 
 ### Batch Operations
-Select multiple apps and update them all at once. Choose specific apps with checkboxes or use **Update All** for maintenance windows. The confirmation modal shows version changes and update types (Major/Minor/Patch) before you commit.
+Select multiple apps and update them simultaneously. Checkboxes for precise control or **Update All** for full maintenance. Confirmation modal shows version changes (1.0 → 2.0), update types (Major/Minor/Patch), and dependencies before execution.
+
+### Intelligent Safety Checks
+Automatically detects and prevents problematic updates:
+- **Unavailable Apps**: Identifies apps blocked by licensing, compatibility, or instance type
+- **Blocked Versions**: Flags versions marked with `block_install` in ServiceNow
+- **Conflict Detection**: Prevents new batches when another installation is in progress
+- **Dependency Resolution**: Shows app dependencies with installation status
 
 ### Real-Time Progress Tracking
-Watch updates happen live with a progress bar, completion counter, and direct links to batch plans and execution trackers. The interface automatically refreshes when installations complete—no more guessing if it's done.
+Live updates with progress bar, completion counter, and current app name. Direct links to batch install plans and execution trackers. Automatic refresh when complete—plus the ability to cancel in-progress batches.
 
-### Installation History
-View all past batch operations with timestamps, app counts, completion status, and creation details. Perfect for audits and troubleshooting.
+### Smart Search & Filters
+Instant search across app names, vendors, product families, and versions. Filter by update type (Major/Minor/Patch) or toggle unavailable apps. Pagination supports 5-100 items per view—handles large app portfolios smoothly.
 
-### Intelligent Search & Filtering
-Type to instantly search across app names, vendors, and versions. The search works in real-time with "No results" feedback. Handle large app portfolios with pagination (5-100 items per page).
-
-### Conflict Prevention
-The app automatically detects when another batch installation is running and disables update buttons with a clear info banner. No more mysterious failures from conflicting operations.
+### Complete Audit Trail
+View all batch installations with timestamps, app counts, states, and detailed notes. Perfect for compliance audits and troubleshooting failed updates.
 
 ### Store Update Checker
-Trigger ServiceNow's store checker to query for the latest versions available. The app notifies you when it's done and automatically refreshes the list with new updates.
+One-click trigger for ServiceNow's update checker to query the latest store versions. Auto-refreshes your app list when complete.
 
 ## Architecture
 
-Built with **React 19**, **TypeScript 5.5**, and **ServiceNow Fluent SDK 4.2**. The frontend uses React hooks for state management, while the backend leverages ServiceNow's `sn_appclient` APIs (AppUpgrader, UpdateChecker) through a GlideAjax service layer.
+Built with **React 19** + **TypeScript 5.5** + **ServiceNow Fluent SDK 4.2**. Modular server-side architecture with four utility classes handling validation, batch management, package preparation, and dependency resolution.
 
 **Tech Stack:**
-- Frontend: React 19, TypeScript, Custom CSS (ServiceNow design system)
-- Backend: ScriptInclude extending AbstractAjaxProcessor
-- Communication: GlideAjax with type-safe async wrappers
-- ServiceNow APIs: GlideRecord, GlideAggregate, sn_appclient
+- **Frontend**: React hooks, custom ServiceNow-styled CSS, type-safe GlideAjax service layer
+- **Backend**: Modular ScriptIncludes (363-line main orchestrator + 693 lines of focused utilities)
+- **ServiceNow APIs**: GlideRecord, GlideAggregate, sn_appclient (AppUpgrader, UpdateChecker)
+- **Error Handling**: Multi-layer null-safety checks, comprehensive error boundaries
 
 ## Development
 
 ```bash
-npm run build        # Compile Fluent metadata and React app
-npm run deploy       # Deploy to ServiceNow instance  
-npm run transform    # Sync remote changes locally
-npm run types        # Download ServiceNow type definitions
+npm run build        # Compile Fluent metadata + React bundle
+npm run deploy       # Deploy to ServiceNow (or use now-sdk install)
+npm run transform    # Sync remote changes to local
 ```
 
-**Standard workflow:** Make changes → `npm run build && npm run deploy` → Test in instance
+**Workflow:** Edit → `npm run build && npm run deploy` → Test in instance
+
+**Files to know:**
+- `src/fluent/script-includes/*.server.js` - ServiceNow server logic
+- `src/client/` - React application (TypeScript)
+- `src/server/` - Utility classes (validation, batch, package, dependencies)
 
 ## Troubleshooting
 
@@ -89,13 +96,7 @@ npm run types        # Download ServiceNow type definitions
 
 ## Contributing
 
-Contributions welcome! Fork the repo, create a feature branch, test thoroughly, and open a pull request.
-
-**When reporting bugs, include:**
-- ServiceNow release version
-- Steps to reproduce
-- Error messages (console + System Logs)
-- Screenshots if applicable
+Fork → Feature branch → Test → Pull request. When reporting bugs, include ServiceNow version, reproduction steps, error messages (console + System Logs), and screenshots.
 
 ## License
 
@@ -103,7 +104,7 @@ Licensed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE) f
 
 ## Author
 
-**Daniel Aagren Seehartrai Madsen**
+**Daniel Aagren Seehartrai Madsen** • ServiceNow Rising Star 2025
 
 Built with ServiceNow Fluent SDK, React, TypeScript, and a passion for making ServiceNow administration easier.
 
