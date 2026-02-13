@@ -368,50 +368,48 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                 </tbody>
             </table>
 
-            {totalPages > 1 && (
-                <div className="pagination">
-                    <button
-                        type="button"
-                        className="pagination-btn"
-                        onClick={handlePreviousPage}
-                        disabled={currentPage === 1}
-                        aria-label="Previous page"
-                    >
-                        ‹ Previous
-                    </button>
-                    
-                    <div className="page-numbers">
-                        {getPageNumbers().map((page, index) => (
-                            typeof page === 'number' ? (
-                                <button
-                                    type="button"
-                                    key={page}
-                                    className={`page-number ${currentPage === page ? 'active' : ''}`}
-                                    onClick={() => handlePageChange(page)}
-                                    aria-label={`Page ${page}`}
-                                    aria-current={currentPage === page ? 'page' : undefined}
-                                >
-                                    {page}
-                                </button>
-                            ) : (
-                                <span key={`ellipsis-${index}`} className="page-ellipsis">
-                                    {page}
-                                </span>
-                            )
-                        ))}
-                    </div>
-
-                    <button
-                        type="button"
-                        className="pagination-btn"
-                        onClick={handleNextPage}
-                        disabled={currentPage === totalPages}
-                        aria-label="Next page"
-                    >
-                        Next ›
-                    </button>
+            <div className="pagination">
+                <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                    aria-label="Previous page"
+                >
+                    ‹ Previous
+                </button>
+                
+                <div className="page-numbers">
+                    {getPageNumbers().map((page, index) => (
+                        typeof page === 'number' ? (
+                            <button
+                                type="button"
+                                key={page}
+                                className={`page-number ${currentPage === page ? 'active' : ''}`}
+                                onClick={() => handlePageChange(page)}
+                                aria-label={`Page ${page}`}
+                                aria-current={currentPage === page ? 'page' : undefined}
+                            >
+                                {page}
+                            </button>
+                        ) : (
+                            <span key={`ellipsis-${index}`} className="page-ellipsis">
+                                {page}
+                            </span>
+                        )
+                    ))}
                 </div>
-            )}
+
+                <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    aria-label="Next page"
+                >
+                    Next ›
+                </button>
+            </div>
                 </>
             )}
         </div>
