@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { StoreApp } from '../types'
 
 interface ConfirmationModalProps {
@@ -9,6 +9,28 @@ interface ConfirmationModalProps {
 }
 
 export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible }: ConfirmationModalProps) {
+    const modalRef = useRef<HTMLDivElement>(null)
+    const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
+    // Handle Escape key
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onCancel()
+            }
+        }
+
+        if (isVisible) {
+            document.addEventListener('keydown', handleEscape)
+            // Focus the confirm button when modal opens
+            setTimeout(() => confirmButtonRef.current?.focus(), 100)
+        }
+
+        return () => {
+            document.removeEventListener('keydown', handleEscape)
+        }
+    }, [isVisible, onCancel])
+
     if (!isVisible) return null
 
     const getUpdateTypeColor = (updateType: string) => {
@@ -25,11 +47,27 @@ export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible
     }
 
     return (
-        <div className="modal-overlay" onClick={onCancel}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div 
+            className="modal-overlay" 
+            onClick={onCancel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+        >
+            <div 
+                ref={modalRef}
+                className="modal-content" 
+                onClick={(e) => e.stopPropagation()}
+                role="document"
+            >
                 <div className="modal-header">
-                    <h2>Confirm Application Updates</h2>
-                    <button className="modal-close" onClick={onCancel} aria-label="Close">
+                    <h2 id="modal-title">Confirm Application Updates</h2>
+                    <button 
+                        className="modal-close" 
+                        onClick={onCancel} 
+                        aria-label="Close modal"
+                        type="button"
+                    >
                         &times;
                     </button>
                 </div>
@@ -67,10 +105,20 @@ export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible
                 </div>
                 
                 <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onCancel}>
+                    <button 
+                        className="btn btn-secondary" 
+                        onClick={onCancel}
+                        type="button"
+                    >
                         Cancel
                     </button>
-                    <button className="btn btn-primary" onClick={onConfirm}>
+                    <button 
+                        ref={confirmButtonRef}
+                        className="btn btn-primary" 
+                        onClick={onConfirm}
+                        type="button"
+                        autoFocus
+                    >
                         Confirm and Update
                     </button>
                 </div>

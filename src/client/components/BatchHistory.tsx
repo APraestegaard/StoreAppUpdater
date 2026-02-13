@@ -1,30 +1,59 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, memo, useRef } from 'react'
 import { BatchHistory as BatchHistoryType } from '../types'
-import { StoreAppService } from '../services/StoreAppService'
+import { storeAppService } from '../services/StoreAppService'
+import { BATCH_STATES } from '../constants'
 
-export default function BatchHistory() {
+interface BatchHistoryProps {
+  refreshTrigger?: number // Optional prop to trigger refresh
+}
+
+const BatchHistory = memo(function BatchHistory({ refreshTrigger }: BatchHistoryProps) {
     const [history, setHistory] = useState<BatchHistoryType[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isExpanded, setIsExpanded] = useState(false)
-    const service = useMemo(() => new StoreAppService(), [])
+    const cacheRef = useRef<{ data: BatchHistoryType[], timestamp: number } | null>(null)
+    const CACHE_DURATION = 30000 // 30 seconds cache
 
-    const loadHistory = useCallback(async () => {
+    const loadHistory = useCallback(async (force = false) => {
+        // Check cache first
+        const now = Date.now()
+        if (!force && cacheRef.current && (now - cacheRef.current.timestamp) < CACHE_DURATION) {
+            setHistory(cacheRef.current.data)
+            setLoading(false)
+            return
+        }
+
         try {
             setLoading(true)
             setError(null)
-            const data = await service.getBatchHistory()
+            const data = await storeAppService.getBatchHistory()
             setHistory(data)
+            
+            // Update cache
+            cacheRef.current = {
+                data,
+                timestamp: now
+            }
         } catch (err) {
+            console.error('[BatchHistory] Failed to load:', err)
             setError('Failed to load batch history')
         } finally {
             setLoading(false)
         }
-    }, [service])
+    }, [])
 
+    // Load history on mount
     useEffect(() => {
         void loadHistory()
     }, [loadHistory])
+
+    // Refresh when trigger changes (from parent component)
+    useEffect(() => {
+        if (refreshTrigger) {
+            void loadHistory(true) // Force refresh
+        }
+    }, [refreshTrigger, loadHistory])
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)
@@ -39,19 +68,19 @@ export default function BatchHistory() {
 
     const getStateDisplay = (state: string): string => {
         switch (state) {
-            case 'ready':
+            case BATCH_STATES.READY:
                 return 'Preparing'
-            case 'pending':
+            case BATCH_STATES.PENDING:
                 return 'Pending'
-            case 'in_progress':
+            case BATCH_STATES.IN_PROGRESS:
                 return 'In Progress'
-            case 'installed':
+            case BATCH_STATES.INSTALLED:
                 return 'Completed'
-            case 'error':
+            case BATCH_STATES.ERROR:
                 return 'Failed'
-            case 'invalid':
+            case BATCH_STATES.INVALID:
                 return 'Invalid'
-            case 'partial_install':
+            case BATCH_STATES.PARTIAL_INSTALL:
                 return 'Partial'
             default:
                 return state
@@ -60,14 +89,14 @@ export default function BatchHistory() {
 
     const getStateClass = (state: string): string => {
         switch (state) {
-            case 'installed':
+            case BATCH_STATES.INSTALLED:
                 return 'history-success'
-            case 'error':
-            case 'invalid':
+            case BATCH_STATES.ERROR:
+            case BATCH_STATES.INVALID:
                 return 'history-error'
-            case 'partial_install':
+            case BATCH_STATES.PARTIAL_INSTALL:
                 return 'history-warning'
-            case 'in_progress':
+            case BATCH_STATES.IN_PROGRESS:
                 return 'history-progress'
             default:
                 return 'history-pending'
@@ -118,7 +147,7 @@ export default function BatchHistory() {
                         <div className="history-main">
                             <div className="history-info">
                                 <a 
-                                    href={service.getBatchInstallUrl(batch.sys_id)}
+                                    href={storeAppService.getBatchInstallUrl(batch.sys_id)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="history-name"
@@ -165,4 +194,6 @@ export default function BatchHistory() {
             )}
         </div>
     )
-}
+})
+
+export default BatchHistory

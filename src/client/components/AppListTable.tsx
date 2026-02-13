@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, memo } from 'react'
 import { StoreApp } from '../types'
+import { useDebounce } from '../hooks'
 
 interface AppListTableProps {
     apps: StoreApp[]
@@ -9,11 +10,14 @@ interface AppListTableProps {
     showUnavailableApps: boolean
 }
 
-export default function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll, showUnavailableApps }: AppListTableProps) {
+const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectApp, onSelectAll, showUnavailableApps }: AppListTableProps) {
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(10)
     const [searchQuery, setSearchQuery] = useState('')
     const [updateTypeFilter, setUpdateTypeFilter] = useState<string>('all')
+
+    // Debounce search query for better performance
+    const debouncedSearchQuery = useDebounce(searchQuery, 300)
 
     const getUpdateTypeColor = (updateType: string) => {
         switch (updateType) {
@@ -55,9 +59,9 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
             result = result.filter(app => app.update_type === updateTypeFilter)
         }
 
-        // Filter by search query
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase()
+        // Filter by search query using debounced value
+        if (debouncedSearchQuery.trim()) {
+            const query = debouncedSearchQuery.toLowerCase()
             result = result.filter(app => 
                 app.name.toLowerCase().includes(query) ||
                 app.vendor.toLowerCase().includes(query) ||
@@ -70,7 +74,7 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
         }
 
         return result
-    }, [apps, searchQuery, updateTypeFilter, showUnavailableApps])
+    }, [apps, debouncedSearchQuery, updateTypeFilter, showUnavailableApps])
 
     // Count apps by update type for filter badges (only available apps)
     const updateTypeCounts = useMemo(() => {
@@ -404,4 +408,6 @@ export default function AppListTable({ apps, selectedApps, onSelectApp, onSelect
             )}
         </div>
     )
-}
+})
+
+export default AppListTable

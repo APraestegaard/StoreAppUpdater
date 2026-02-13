@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { memo } from 'react'
 
 interface ActionBarProps {
     appsCount: number
     selectedCount: number
     isUpdating: boolean
     isCheckingUpdates: boolean
+    isRefreshing: boolean
     onUpdateSelected: () => void
     onUpdateAll: () => void
     onCheckUpdates: () => void
@@ -14,11 +15,12 @@ interface ActionBarProps {
     onToggleUnavailable: (show: boolean) => void
 }
 
-export default function ActionBar({
+const ActionBar = memo(function ActionBar({
     appsCount,
     selectedCount,
     isUpdating,
     isCheckingUpdates,
+    isRefreshing,
     onUpdateSelected,
     onUpdateAll,
     onCheckUpdates,
@@ -35,6 +37,7 @@ export default function ActionBar({
                     disabled={selectedCount === 0 || isUpdating}
                     className="btn btn-primary"
                     title={selectedCount === 0 ? 'Select apps to update' : `Update ${selectedCount} selected app(s)`}
+                    type="button"
                 >
                     Update Selected {selectedCount > 0 && `(${selectedCount})`}
                 </button>
@@ -43,6 +46,7 @@ export default function ActionBar({
                     disabled={appsCount === 0 || isUpdating}
                     className="btn btn-primary"
                     title={appsCount === 0 ? 'No apps to update' : `Update all ${appsCount} app(s)`}
+                    type="button"
                 >
                     Update All {appsCount > 0 && `(${appsCount})`}
                 </button>
@@ -51,16 +55,20 @@ export default function ActionBar({
                     disabled={isCheckingUpdates || isUpdating}
                     className="btn btn-secondary"
                     title="Check ServiceNow store for new updates"
+                    type="button"
+                    aria-busy={isCheckingUpdates}
                 >
-                    {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
+                    {isCheckingUpdates ? '⟳ Checking...' : 'Check for Updates'}
                 </button>
                 <button
                     onClick={onRefresh}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isRefreshing}
                     className="btn btn-secondary"
                     title="Refresh app list"
+                    type="button"
+                    aria-busy={isRefreshing}
                 >
-                    Refresh
+                    {isRefreshing ? '⟳ Refreshing...' : 'Refresh'}
                 </button>
             </div>
             <div className="action-group filters">
@@ -76,4 +84,6 @@ export default function ActionBar({
             </div>
         </div>
     )
-}
+})
+
+export default ActionBar

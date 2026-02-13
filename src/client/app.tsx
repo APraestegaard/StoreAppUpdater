@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { StoreApp } from './types'
-import { StoreAppService } from './services/StoreAppService'
+import { storeAppService } from './services/StoreAppService'
+import { useAppList, useBatchStatus, useMessages } from './hooks'
+import { ERROR_MESSAGES, SUCCESS_MESSAGES, TIMING } from './constants'
 import AppListTable from './components/AppListTable'
 import ActionBar from './components/ActionBar'
 import ProgressTracker from './components/ProgressTracker'
@@ -11,89 +13,47 @@ import SkeletonTable from './components/SkeletonTable'
 import './app.css'
 
 export default function App() {
-    const [apps, setApps] = useState<StoreApp[]>([])
+    // Use custom hooks for state management
+    const { apps, loading, error: appsError, loadApps, refreshApps } = useAppList()
+    const { batchInProgress, checkForBatchInProgress } = useBatchStatus()
+    const { error, success, setError, setSuccess, dismissMessages } = useMessages()
+
+    // Local state
     const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set())
-    const [loading, setLoading] = useState(true)
     const [isUpdating, setIsUpdating] = useState(false)
     const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [success, setSuccess] = useState<string | null>(null)
+    const [isRefreshing, setIsRefreshing] = useState(false)
     const [batchId, setBatchId] = useState<string | null>(null)
     const [executionTrackerId, setExecutionTrackerId] = useState<string | null>(null)
     const [showConfirmModal, setShowConfirmModal] = useState(false)
     const [pendingUpdateApps, setPendingUpdateApps] = useState<StoreApp[]>([])
     const [showUnavailableApps, setShowUnavailableApps] = useState(false)
     const [showCheckUpdatesConfirm, setShowCheckUpdatesConfirm] = useState(false)
-    const [batchInProgress, setBatchInProgress] = useState<{
-        inProgress: boolean
-        batchName?: string
-        state?: string
-        link?: string
-        batchId?: string
-    } | null>(null)
-    const service = useMemo(() => new StoreAppService(), [])
+    const [batchHistoryRefreshTrigger, setBatchHistoryRefreshTrigger] = useState(0)
 
-    const loadApps = async () => {
-        try {
-            setLoading(true)
-            setError(null)
-            const data = await service.getAppsNeedingUpdate()
-            setApps(data)
-            setSelectedApps(new Set()) // Clear selections on refresh
-        } catch (err) {
-            setError('Failed to load applications. Please try again.')
-        } finally {
-            setLoading(false)
-        }
-    }
-
+    // Initialize and check for batch in progress
     useEffect(() => {
         void loadApps()
         void checkForBatchInProgress()
-    }, [])
+    }, [loadApps, checkForBatchInProgress])
 
-    // Auto-dismiss success messages after 5 seconds
+    // Show apps error if it exists
     useEffect(() => {
-        if (success) {
-            const timer = setTimeout(() => {
-                setSuccess(null)
-            }, 5000)
-            
-            return () => clearTimeout(timer)
+        if (appsError) {
+            setError(appsError)
         }
-    }, [success])
+    }, [appsError, setError])
 
-    // Auto-dismiss error messages after 8 seconds (longer for errors)
-    useEffect(() => {
-        if (error) {
-            const timer = setTimeout(() => {
-                setError(null)
-            }, 8000)
-            
-            return () => clearTimeout(timer)
-        }
-    }, [error])
+    // Memoized handlers
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true)
+        setSelectedApps(new Set()) // Clear selections on refresh
+        await refreshApps()
+        setIsRefreshing(false)
+        setBatchHistoryRefreshTrigger(prev => prev + 1)
+    }, [refreshApps])
 
-    const checkForBatchInProgress = async () => {
-        try {
-            const status = await service.checkBatchInProgress()
-            if (status.inProgress) {
-                setBatchInProgress({
-                    inProgress: true,
-                    batchName: status.batchName,
-                    state: status.state,
-                    link: status.link,
-                    batchId: status.batchId
-                })
-            } else {
-                setBatchInProgress(null)
-            }
-        } catch (err) {
-            // Error handled silently - batch status is non-critical
-        }
-    }
-
-    const handleSelectApp = (sysId: string, selected: boolean) => {
+    const handleSelectApp = useCallback((sysId: string, selected: boolean) => {
         setSelectedApps((prev) => {
             const newSet = new Set(prev)
             if (selected) {
@@ -103,23 +63,26 @@ export default function App() {
             }
             return newSet
         })
-    }
+    }, [])
 
-    const handleSelectAll = (selected: boolean) => {
+    const handleSelectAll = useCallback((selected: boolean) => {
         if (selected) {
             setSelectedApps(new Set(apps.map((app) => app.sys_id)))
         } else {
             setSelectedApps(new Set())
         }
-    }
+    }, [apps])
 
-    const handleUpdateSelected = async () => {
+    const handleUpdateSelected = useCallback(async () => {
         if (selectedApps.size === 0) return
 
         // Check for in-progress batch
         await checkForBatchInProgress()
         if (batchInProgress?.inProgress) {
-            setError(`Cannot start new update: Batch installation "${batchInProgress.batchName}" is currently ${batchInProgress.state}. Please wait for it to complete.`)
+            setError(ERROR_MESSAGES.BATCH_IN_PROGRESS(
+                batchInProgress.batchName || 'Batch Installation',
+                batchInProgress.state || 'in progress'
+            ))
             return
         }
 
@@ -127,51 +90,55 @@ export default function App() {
         const selectedAppObjects = apps.filter((app) => selectedApps.has(app.sys_id))
         setPendingUpdateApps(selectedAppObjects)
         setShowConfirmModal(true)
-    }
+    }, [selectedApps, apps, batchInProgress, checkForBatchInProgress, setError])
 
-    const handleConfirmUpdate = async () => {
+    const handleConfirmUpdate = useCallback(async () => {
         setShowConfirmModal(false)
         
         try {
+            // Optimistic UI update
             setIsUpdating(true)
             setError(null)
             setSuccess(null)
 
-            const result = await service.updateSelectedApps(pendingUpdateApps, false)
+            // Show immediate feedback
+            setSuccess(SUCCESS_MESSAGES.UPDATE_STARTED(pendingUpdateApps.length))
+
+            const result = await storeAppService.updateSelectedApps(pendingUpdateApps, false)
 
             if (result.success) {
                 setBatchId(result.batch_installation_id)
                 setExecutionTrackerId(result.execution_tracker_id)
-                setSuccess(
-                    `Update batch created successfully! ${pendingUpdateApps.length} application(s) will be updated. Check progress above.`
-                )
                 setPendingUpdateApps([])
+                setSelectedApps(new Set()) // Clear selections after successful update
+                // Success message already shown above
             } else {
-                setError(result.error || 'Failed to start update process')
+                setError(result.error || ERROR_MESSAGES.UPDATE_APPS_FAILED)
                 setIsUpdating(false)
             }
         } catch (err) {
-            setError('Failed to update applications. Please try again.')
+            console.error('[App] Update failed:', err)
+            setError(ERROR_MESSAGES.UPDATE_APPS_FAILED)
             setIsUpdating(false)
         }
-    }
+    }, [pendingUpdateApps, setError, setSuccess])
 
-    const handleCancelUpdate = () => {
+    const handleCancelUpdate = useCallback(() => {
         setShowConfirmModal(false)
         setPendingUpdateApps([])
-    }
+    }, [])
 
-    const handleUpdateAll = async () => {
+    const handleUpdateAll = useCallback(async () => {
         // Show confirmation modal with all available apps (exclude unavailable ones)
         setPendingUpdateApps(apps.filter(app => !app.is_unavailable))
         setShowConfirmModal(true)
-    }
+    }, [apps])
 
-    const handleCheckUpdates = async () => {
+    const handleCheckUpdates = useCallback(async () => {
         setShowCheckUpdatesConfirm(true)
-    }
+    }, [])
 
-    const handleConfirmCheckUpdates = async () => {
+    const handleConfirmCheckUpdates = useCallback(async () => {
         setShowCheckUpdatesConfirm(false)
 
         try {
@@ -179,60 +146,60 @@ export default function App() {
             setError(null)
             setSuccess(null)
 
-            const result = await service.checkForUpdates()
+            const result = await storeAppService.checkForUpdates()
 
             if (result.success) {
                 setSuccess(result.message)
                 // Refresh the list after checking for updates
                 setTimeout(() => {
                     void loadApps()
-                }, 2000)
+                }, TIMING.REFRESH_AFTER_UPDATE_DELAY)
             } else {
-                setError(result.message || 'Failed to check for updates')
+                setError(result.message || ERROR_MESSAGES.CHECK_UPDATES_FAILED)
             }
         } catch (err) {
-            setError('Failed to check for updates. Please try again.')
+            console.error('[App] Check updates failed:', err)
+            setError(ERROR_MESSAGES.CHECK_UPDATES_FAILED)
         } finally {
             setIsCheckingUpdates(false)
         }
-    }
+    }, [loadApps, setError, setSuccess])
 
-    const handleProgressComplete = () => {
+    const handleProgressComplete = useCallback(() => {
         setIsUpdating(false)
-        setSuccess('Installation completed! Refreshing application list...')
+        setSuccess(SUCCESS_MESSAGES.UPDATE_COMPLETED)
         // Keep the progress tracker visible for 3 more seconds before clearing
         setTimeout(() => {
             setBatchId(null)
             setExecutionTrackerId(null)
+            setSelectedApps(new Set()) // Clear selections when update completes
             void loadApps()
-        }, 3000)
-    }
+            setBatchHistoryRefreshTrigger(prev => prev + 1)
+        }, TIMING.REFRESH_AFTER_UPDATE_DELAY)
+    }, [loadApps, setSuccess])
 
-    const handleCancelBatch = async () => {
+    const handleCancelBatch = useCallback(async () => {
         const currentBatchId = batchId || batchInProgress?.batchId
         if (!currentBatchId) return
 
         try {
-            const result = await service.cancelBatchInstallation(currentBatchId)
+            const result = await storeAppService.cancelBatchInstallation(currentBatchId)
             if (result.success) {
-                setSuccess(result.message || 'Batch installation cancelled')
+                setSuccess(result.message || SUCCESS_MESSAGES.BATCH_CANCELLED)
                 setBatchId(null)
                 setExecutionTrackerId(null)
-                setBatchInProgress(null)
+                await checkForBatchInProgress()
                 setIsUpdating(false)
                 void loadApps()
+                setBatchHistoryRefreshTrigger(prev => prev + 1)
             } else {
-                setError(result.message || 'Failed to cancel batch installation')
+                setError(result.message || ERROR_MESSAGES.CANCEL_BATCH_FAILED)
             }
         } catch (err) {
-            setError('Failed to cancel batch installation. Please try again.')
+            console.error('[App] Cancel batch failed:', err)
+            setError(ERROR_MESSAGES.CANCEL_BATCH_FAILED)
         }
-    }
-
-    const dismissMessage = () => {
-        setError(null)
-        setSuccess(null)
-    }
+    }, [batchId, batchInProgress, loadApps, checkForBatchInProgress, setError, setSuccess])
 
     const unavailableCount = useMemo(() => {
         return apps.filter(app => app.is_unavailable).length
@@ -291,7 +258,7 @@ export default function App() {
                     <div className="message error">
                         <span className="message-icon">⚠</span>
                         <span className="message-text">{error}</span>
-                        <button className="message-close" onClick={dismissMessage}>
+                        <button className="message-close" onClick={dismissMessages} type="button" aria-label="Dismiss error message">
                             ×
                         </button>
                     </div>
@@ -301,7 +268,7 @@ export default function App() {
                     <div className="message success">
                         <span className="message-icon">✓</span>
                         <span className="message-text">{success}</span>
-                        <button className="message-close" onClick={dismissMessage}>
+                        <button className="message-close" onClick={dismissMessages} type="button" aria-label="Dismiss success message">
                             ×
                         </button>
                     </div>
@@ -312,10 +279,11 @@ export default function App() {
                     selectedCount={selectedApps.size}
                     isUpdating={isUpdating || batchInProgress?.inProgress || false}
                     isCheckingUpdates={isCheckingUpdates}
+                    isRefreshing={isRefreshing}
                     onUpdateSelected={handleUpdateSelected}
                     onUpdateAll={handleUpdateAll}
                     onCheckUpdates={handleCheckUpdates}
-                    onRefresh={loadApps}
+                    onRefresh={handleRefresh}
                     unavailableCount={unavailableCount}
                     showUnavailableApps={showUnavailableApps}
                     onToggleUnavailable={setShowUnavailableApps}
@@ -333,7 +301,7 @@ export default function App() {
                             showUnavailableApps={showUnavailableApps}
                         />
                         
-                        <BatchHistory />
+                        <BatchHistory refreshTrigger={batchHistoryRefreshTrigger} />
                     </>
                 )}
             </main>

@@ -1,6 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, memo, useCallback } from 'react'
 import { BatchStatusResponse } from '../types'
-import { StoreAppService } from '../services/StoreAppService'
+import { storeAppService } from '../services/StoreAppService'
+import { useInterval } from '../hooks'
+import { TIMING, BATCH_STATES } from '../constants'
 
 interface ProgressTrackerProps {
     batchId: string | null
@@ -10,40 +12,51 @@ interface ProgressTrackerProps {
     onCancel?: () => void
 }
 
-export default function ProgressTracker({ batchId, executionTrackerId, mode, onComplete, onCancel }: ProgressTrackerProps) {
+const ProgressTracker = memo(function ProgressTracker({ batchId, executionTrackerId, mode, onComplete, onCancel }: ProgressTrackerProps) {
     const [status, setStatus] = useState<BatchStatusResponse | null>(null)
-    const service = useMemo(() => new StoreAppService(), [])
 
-    useEffect(() => {
+    const pollStatus = useCallback(async () => {
         if (!batchId) {
             setStatus(null)
             return
         }
 
-        const pollStatus = async () => {
-            try {
-                const result = await service.getBatchStatus(batchId)
-                setStatus(result)
+        try {
+            const result = await storeAppService.getBatchStatus(batchId)
+            setStatus(result)
 
-                // Only call onComplete for user-initiated batches
-                // Detected batches should not trigger auto-refresh
-                // Terminal states: installed, error, invalid, partial_install
-                if (mode === 'user-initiated' && (result.state === 'installed' || result.state === 'error' || result.state === 'invalid' || result.state === 'partial_install')) {
-                    setTimeout(() => {
-                        onComplete()
-                    }, 2000)
-                }
-            } catch (error) {
-                // Status polling error handled silently - will retry on next interval
+            // Only call onComplete for user-initiated batches
+            // Detected batches should not trigger auto-refresh
+            // Terminal states: installed, error, invalid, partial_install
+            const terminalStates = [
+                BATCH_STATES.INSTALLED,
+                BATCH_STATES.ERROR,
+                BATCH_STATES.INVALID,
+                BATCH_STATES.PARTIAL_INSTALL
+            ]
+
+            if (mode === 'user-initiated' && terminalStates.includes(result.state as any)) {
+                setTimeout(() => {
+                    onComplete()
+                }, TIMING.PROGRESS_COMPLETE_DELAY)
             }
+        } catch (error) {
+            console.error('[ProgressTracker] Status polling error:', error)
+            // Status polling error handled silently - will retry on next interval
         }
+    }, [batchId, mode, onComplete])
 
-        // Poll every 3 seconds
-        pollStatus()
-        const interval = setInterval(pollStatus, 3000)
+    // Poll immediately on mount and when batchId changes
+    useEffect(() => {
+        if (batchId) {
+            pollStatus()
+        } else {
+            setStatus(null)
+        }
+    }, [batchId, pollStatus])
 
-        return () => clearInterval(interval)
-    }, [batchId])
+    // Poll every 3 seconds using custom hook
+    useInterval(pollStatus, batchId ? TIMING.BATCH_POLL_INTERVAL : null)
 
     if (!status || !batchId) {
         return null
@@ -160,14 +173,14 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
                 )}
 
                 <div className="progress-links">
-                    <a href={service.getBatchInstallUrl(batchId)} target="_blank" rel="noopener noreferrer">
+                    <a href={storeAppService.getBatchInstallUrl(batchId)} target="_blank" rel="noopener noreferrer">
                         View Batch Install Plan
                     </a>
                     {executionTrackerId && (
                         <>
                             <span className="separator">•</span>
                             <a
-                                href={service.getExecutionTrackerUrl(executionTrackerId)}
+                                href={storeAppService.getExecutionTrackerUrl(executionTrackerId)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
@@ -179,4 +192,6 @@ export default function ProgressTracker({ batchId, executionTrackerId, mode, onC
             </div>
         </div>
     )
-}
+})
+
+export default ProgressTracker
