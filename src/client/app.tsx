@@ -31,10 +31,9 @@ export default function App() {
     const [showCheckUpdatesConfirm, setShowCheckUpdatesConfirm] = useState(false)
     const [batchHistoryRefreshTrigger, setBatchHistoryRefreshTrigger] = useState(0)
 
-    // Initialize and check for batch in progress
     useEffect(() => {
-        void loadApps()
-        void checkForBatchInProgress()
+        Promise.all([loadApps(), checkForBatchInProgress()])
+            .catch(err => console.error('[App] Initialization error:', err))
     }, [loadApps, checkForBatchInProgress])
 
     // Show apps error if it exists

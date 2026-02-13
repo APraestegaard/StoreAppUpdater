@@ -12,6 +12,48 @@ interface ProgressTrackerProps {
     onCancel?: () => void
 }
 
+const getStateDisplay = (state: string): string => {
+    switch (state) {
+        case 'ready':
+            return 'Preparing'
+        case 'pending':
+            return 'Pending'
+        case 'in_progress':
+            return 'In Progress'
+        case 'installed':
+            return 'Completed'
+        case 'error':
+            return 'Error'
+        case 'invalid':
+            return 'Invalid'
+        case 'partial_install':
+            return 'Partially Installed'
+        case 'cancelled':
+            return 'Cancelled'
+        default:
+            return state
+    }
+}
+
+const getStateClass = (state: string): string => {
+    switch (state) {
+        case 'installed':
+            return 'success'
+        case 'error':
+        case 'invalid':
+            return 'error'
+        case 'partial_install':
+        case 'cancelled':
+            return 'warning'
+        case 'in_progress':
+            return 'progress'
+        case 'ready':
+            return 'progress'
+        default:
+            return 'pending'
+    }
+}
+
 const ProgressTracker = memo(function ProgressTracker({ batchId, executionTrackerId, mode, onComplete, onCancel }: ProgressTrackerProps) {
     const [status, setStatus] = useState<BatchStatusResponse | null>(null)
 
@@ -60,48 +102,6 @@ const ProgressTracker = memo(function ProgressTracker({ batchId, executionTracke
 
     if (!status || !batchId) {
         return null
-    }
-
-    const getStateDisplay = (state: string): string => {
-        switch (state) {
-            case 'ready':
-                return 'Preparing'
-            case 'pending':
-                return 'Pending'
-            case 'in_progress':
-                return 'In Progress'
-            case 'installed':
-                return 'Completed'
-            case 'error':
-                return 'Error'
-            case 'invalid':
-                return 'Invalid'
-            case 'partial_install':
-                return 'Partially Installed'
-            case 'cancelled':
-                return 'Cancelled'
-            default:
-                return state
-        }
-    }
-
-    const getStateClass = (state: string): string => {
-        switch (state) {
-            case 'installed':
-                return 'success'
-            case 'error':
-            case 'invalid':
-                return 'error'
-            case 'partial_install':
-            case 'cancelled':
-                return 'warning'
-            case 'in_progress':
-                return 'progress'
-            case 'ready':
-                return 'progress'
-            default:
-                return 'pending'
-        }
     }
 
     return (

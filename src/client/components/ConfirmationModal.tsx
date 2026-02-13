@@ -8,6 +8,16 @@ interface ConfirmationModalProps {
     isVisible: boolean
 }
 
+const UPDATE_TYPE_COLORS: Record<string, string> = {
+    Major: '#dc3545',
+    Minor: '#fd7e14',
+    Patch: '#28a745',
+}
+
+const getUpdateTypeColor = (updateType: string): string => {
+    return UPDATE_TYPE_COLORS[updateType] || '#6c757d'
+}
+
 export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible }: ConfirmationModalProps) {
     const modalRef = useRef<HTMLDivElement>(null)
     const confirmButtonRef = useRef<HTMLButtonElement>(null)
@@ -32,19 +42,6 @@ export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible
     }, [isVisible, onCancel])
 
     if (!isVisible) return null
-
-    const getUpdateTypeColor = (updateType: string) => {
-        switch (updateType) {
-            case 'Major':
-                return '#dc3545'
-            case 'Minor':
-                return '#fd7e14'
-            case 'Patch':
-                return '#28a745'
-            default:
-                return '#6c757d'
-        }
-    }
 
     return (
         <div 

@@ -29,6 +29,7 @@ body {
     font-size: 24px;
     font-weight: 600;
     color: #293e40;
+    text-wrap: balance;
 }
 
 .subtitle {
@@ -183,7 +184,7 @@ body {
     border: 1px solid transparent;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s;
     font-family: inherit;
 }
 
@@ -287,7 +288,7 @@ body {
     font-size: 13px;
     font-family: inherit;
     width: 250px;
-    transition: all 0.2s;
+    transition: border-color 0.2s;
 }
 
 .search-input:hover {
@@ -553,7 +554,7 @@ body {
     border: 1px solid #d3d7d9;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
     font-family: inherit;
 }
 
@@ -584,7 +585,7 @@ body {
     border: 1px solid #d3d7d9;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
     font-family: inherit;
     display: flex;
     align-items: center;
@@ -985,7 +986,7 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: background-color 0.2s, color 0.2s;
 }
 
 .modal-close:hover {
@@ -1094,7 +1095,7 @@ body {
     border-radius: 4px;
     border: none;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .modal-footer .btn-secondary {
@@ -1300,7 +1301,7 @@ body {
     border-left: 4px solid #d3d7d9;
     background-color: #f9fafb;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: background-color 0.2s;
 }
 
 .history-item:hover {
@@ -1596,7 +1597,7 @@ body {
     font-weight: 600;
     color: #0066b3;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .history-toggle:hover {

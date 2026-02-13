@@ -7,6 +7,55 @@ interface BatchHistoryProps {
   refreshTrigger?: number // Optional prop to trigger refresh
 }
 
+const formatDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    const locale = navigator.languages?.[0] || 'en-US'
+    return date.toLocaleString(locale, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+}
+
+const getStateDisplay = (state: string): string => {
+    switch (state) {
+        case BATCH_STATES.READY:
+            return 'Preparing'
+        case BATCH_STATES.PENDING:
+            return 'Pending'
+        case BATCH_STATES.IN_PROGRESS:
+            return 'In Progress'
+        case BATCH_STATES.INSTALLED:
+            return 'Completed'
+        case BATCH_STATES.ERROR:
+            return 'Failed'
+        case BATCH_STATES.INVALID:
+            return 'Invalid'
+        case BATCH_STATES.PARTIAL_INSTALL:
+            return 'Partial'
+        default:
+            return state
+    }
+}
+
+const getStateClass = (state: string): string => {
+    switch (state) {
+        case BATCH_STATES.INSTALLED:
+            return 'history-success'
+        case BATCH_STATES.ERROR:
+        case BATCH_STATES.INVALID:
+            return 'history-error'
+        case BATCH_STATES.PARTIAL_INSTALL:
+            return 'history-warning'
+        case BATCH_STATES.IN_PROGRESS:
+            return 'history-progress'
+        default:
+            return 'history-pending'
+    }
+}
+
 const BatchHistory = memo(function BatchHistory({ refreshTrigger }: BatchHistoryProps) {
     const [history, setHistory] = useState<BatchHistoryType[]>([])
     const [loading, setLoading] = useState(true)
@@ -54,54 +103,6 @@ const BatchHistory = memo(function BatchHistory({ refreshTrigger }: BatchHistory
             void loadHistory(true) // Force refresh
         }
     }, [refreshTrigger, loadHistory])
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString)
-        return date.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        })
-    }
-
-    const getStateDisplay = (state: string): string => {
-        switch (state) {
-            case BATCH_STATES.READY:
-                return 'Preparing'
-            case BATCH_STATES.PENDING:
-                return 'Pending'
-            case BATCH_STATES.IN_PROGRESS:
-                return 'In Progress'
-            case BATCH_STATES.INSTALLED:
-                return 'Completed'
-            case BATCH_STATES.ERROR:
-                return 'Failed'
-            case BATCH_STATES.INVALID:
-                return 'Invalid'
-            case BATCH_STATES.PARTIAL_INSTALL:
-                return 'Partial'
-            default:
-                return state
-        }
-    }
-
-    const getStateClass = (state: string): string => {
-        switch (state) {
-            case BATCH_STATES.INSTALLED:
-                return 'history-success'
-            case BATCH_STATES.ERROR:
-            case BATCH_STATES.INVALID:
-                return 'history-error'
-            case BATCH_STATES.PARTIAL_INSTALL:
-                return 'history-warning'
-            case BATCH_STATES.IN_PROGRESS:
-                return 'history-progress'
-            default:
-                return 'history-pending'
-        }
-    }
 
     if (loading) {
         return (
@@ -186,6 +187,7 @@ const BatchHistory = memo(function BatchHistory({ refreshTrigger }: BatchHistory
             
             {history.length > 3 && (
                 <button 
+                    type="button"
                     className="history-toggle"
                     onClick={() => setIsExpanded(!isExpanded)}
                 >

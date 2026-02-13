@@ -72,8 +72,9 @@ const ActionBar = memo(function ActionBar({
                 </button>
             </div>
             <div className="action-group filters">
-                <label className="toggle-label" title="Show applications that cannot be installed on this instance type">
+                <label htmlFor="show-unavailable-apps" className="toggle-label" title="Show applications that cannot be installed on this instance type">
                     <input
+                        id="show-unavailable-apps"
                         type="checkbox"
                         checked={showUnavailableApps}
                         onChange={(e) => onToggleUnavailable(e.target.checked)}

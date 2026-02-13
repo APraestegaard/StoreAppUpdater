@@ -210,12 +210,14 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                 <div className="table-controls">
                     <div className="update-type-filter">
                         <button 
+                            type="button"
                             className={`btn btn-sm ${updateTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => handleUpdateTypeFilterChange('all')}
                         >
                             All ({updateTypeCounts.all})
                         </button>
                         <button 
+                            type="button"
                             className={`btn btn-sm ${updateTypeFilter === 'Major' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => handleUpdateTypeFilterChange('Major')}
                             disabled={updateTypeCounts.Major === 0}
@@ -223,6 +225,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                             Major ({updateTypeCounts.Major})
                         </button>
                         <button 
+                            type="button"
                             className={`btn btn-sm ${updateTypeFilter === 'Minor' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => handleUpdateTypeFilterChange('Minor')}
                             disabled={updateTypeCounts.Minor === 0}
@@ -230,6 +233,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                             Minor ({updateTypeCounts.Minor})
                         </button>
                         <button 
+                            type="button"
                             className={`btn btn-sm ${updateTypeFilter === 'Patch' ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => handleUpdateTypeFilterChange('Patch')}
                             disabled={updateTypeCounts.Patch === 0}
@@ -248,6 +252,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                         />
                         {searchQuery && (
                             <button
+                                type="button"
                                 onClick={handleClearSearch}
                                 className="search-clear"
                                 aria-label="Clear search"
@@ -276,7 +281,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                     <div className="no-results-icon">🔍</div>
                     <h3>No applications found</h3>
                     <p>No applications match your search for "{searchQuery}"</p>
-                    <button onClick={handleClearSearch} className="btn btn-secondary">
+                    <button type="button" onClick={handleClearSearch} className="btn btn-secondary">
                         Clear Search
                     </button>
                 </div>
@@ -366,6 +371,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
             {totalPages > 1 && (
                 <div className="pagination">
                     <button
+                        type="button"
                         className="pagination-btn"
                         onClick={handlePreviousPage}
                         disabled={currentPage === 1}
@@ -378,6 +384,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                         {getPageNumbers().map((page, index) => (
                             typeof page === 'number' ? (
                                 <button
+                                    type="button"
                                     key={page}
                                     className={`page-number ${currentPage === page ? 'active' : ''}`}
                                     onClick={() => handlePageChange(page)}
@@ -395,6 +402,7 @@ const AppListTable = memo(function AppListTable({ apps, selectedApps, onSelectAp
                     </div>
 
                     <button
+                        type="button"
                         className="pagination-btn"
                         onClick={handleNextPage}
                         disabled={currentPage === totalPages}
