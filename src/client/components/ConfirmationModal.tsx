@@ -91,6 +91,22 @@ export default function ConfirmationModal({ apps, onConfirm, onCancel, isVisible
                                         {app.update_type}
                                     </span>
                                 </div>
+                                {app.dependencies && app.dependencies.length > 0 && (
+                                    <div className="app-dependencies">
+                                        <div className="dependencies-label">Dependencies:</div>
+                                        <ul className="dependencies-list">
+                                            {app.dependencies.map((dep, idx) => (
+                                                <li 
+                                                    key={idx} 
+                                                    className={`dependency-item ${dep.status === 'installed' ? 'installed' : ''}`}
+                                                    title={dep.status === 'installed' ? 'Already installed' : 'Required dependency'}
+                                                >
+                                                    {dep.name}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

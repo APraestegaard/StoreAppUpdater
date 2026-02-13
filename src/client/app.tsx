@@ -227,7 +227,6 @@ export default function App() {
                 
                 {/* Confirmation Alert Modal for check updates */}
                 <ConfirmationAlertModal
-                    title="Check for Updates"
                     message="Checking for updates may take several minutes. The page will remain responsive. Continue?"
                     onConfirm={handleConfirmCheckUpdates}
                     onCancel={() => setShowCheckUpdatesConfirm(false)}

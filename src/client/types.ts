@@ -7,6 +7,12 @@ export interface Indicator {
     show_as_filter: boolean
 }
 
+export interface AppDependency {
+    name: string
+    id: string
+    status: 'installed' | 'will_activate'
+}
+
 export interface StoreApp {
     sys_id: string
     name: string
@@ -21,6 +27,7 @@ export interface StoreApp {
     is_unavailable: boolean
     unavailable_reason?: string | null
     product_families: string[]
+    dependencies?: AppDependency[]
 }
 
 export interface BatchInstallResponse {

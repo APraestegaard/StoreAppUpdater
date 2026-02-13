@@ -145,6 +145,8 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     }
                 }
                 
+                var dependencies = this._getAppDependencies(storeSysId, appQuery);
+                
                 seenApps[appTitle] = true;
                 result.push({
                     sys_id: storeSysId,
@@ -160,7 +162,7 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                     is_unavailable: unavailableReasons.length > 0,
                     unavailable_reason: unavailableReasons.length > 0 ? unavailableReasons.join('; ') : null,
                     product_families: productFamilies,
-                    dependencies: appQuery.getValue('dependencies')
+                    dependencies: dependencies
                 });
             }
             
@@ -687,6 +689,176 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             }
         }
         return families;
+    },
+    
+    /**
+     * Get dependency information for an app with enhanced debugging
+     * @param appSysId - sys_store_app sys_id
+     * @param appGr - GlideRecord of sys_store_app (optional, for performance)
+     * @returns array of dependency objects [{name, id, status}]
+     */
+    _getAppDependencies: function(appSysId, appGr) {
+        var dependencies = [];
+        try {
+            var storeApp;
+            if (appGr && appGr.getUniqueValue() === appSysId) {
+                storeApp = appGr;
+            } else {
+                storeApp = new GlideRecord('sys_store_app');
+                if (!storeApp.get(appSysId)) {
+                    return dependencies;
+                }
+            }
+            
+            // Try multiple possible dependency field names
+            var depsStr = storeApp.getValue('dependencies');
+            if (!depsStr || depsStr.trim() === '') {
+                depsStr = storeApp.getValue('requires') || storeApp.getValue('prerequisite_apps');
+            }
+            
+            if (!depsStr || depsStr.trim() === '') {
+                return dependencies;
+            }
+            
+            gs.info('StoreAppManager - Raw dependencies for ' + storeApp.getValue('name') + ': ' + depsStr);
+            
+            // Parse dependencies - handle multiple formats intelligently
+            var deps = [];
+            var cleanStr = depsStr.trim();
+            
+            // Check if it's JSON
+            if (cleanStr.startsWith('[') || cleanStr.startsWith('{')) {
+                deps = this._parseJSON(cleanStr, []);
+            }
+            // Detect most likely separator by counting occurrences
+            else {
+                var separators = [
+                    {char: '/', count: (cleanStr.match(/\//g) || []).length},
+                    {char: '|', count: (cleanStr.match(/\|/g) || []).length},
+                    {char: ';', count: (cleanStr.match(/;/g) || []).length},
+                    {char: ',', count: (cleanStr.match(/,/g) || []).length}
+                ];
+                
+                // Find separator with highest count (if count > 0)
+                var bestSep = null;
+                var maxCount = 0;
+                for (var i = 0; i < separators.length; i++) {
+                    if (separators[i].count > maxCount) {
+                        maxCount = separators[i].count;
+                        bestSep = separators[i].char;
+                    }
+                }
+                
+                // Split by detected separator
+                if (bestSep && maxCount > 0) {
+                    var parts = cleanStr.split(bestSep);
+                    for (var p = 0; p < parts.length; p++) {
+                        var part = parts[p].trim();
+                        // Remove version numbers if present (e.g., "app:1.0.0" -> "app")
+                        if (part.indexOf(':') > -1) {
+                            var colonParts = part.split(':');
+                            part = colonParts[0].trim();
+                        }
+                        if (part && part.length > 0) {
+                            deps.push({id: part});
+                        }
+                    }
+                }
+                // No separator found, check for concatenated name:version format
+                else if (cleanStr.match(/[a-z_]+:\d+\.\d+/i)) {
+                    var matches = cleanStr.match(/([a-z_]+):\d+\.\d+/gi);
+                    if (matches) {
+                        for (var m = 0; m < matches.length; m++) {
+                            var matchParts = matches[m].split(':');
+                            if (matchParts[0]) {
+                                deps.push({id: matchParts[0].trim()});
+                            }
+                        }
+                    }
+                }
+                // Single dependency
+                else if (cleanStr.length > 0) {
+                    deps.push({id: cleanStr});
+                }
+            }
+            
+            gs.debug('StoreAppManager - Parsed ' + deps.length + ' dependencies');
+            
+            // Process each dependency
+            for (var i = 0; i < deps.length; i++) {
+                var dep = deps[i];
+                if (!dep || !dep.id) {
+                    continue;
+                }
+                
+                var depId = dep.id.toString().trim();
+                if (!depId || depId.length === 0) {
+                    continue;
+                }
+                
+                var depName = dep.name || depId;
+                var status = 'will_activate';
+                
+                // Look up dependency in sys_store_app - try multiple strategies
+                var depApp = new GlideRecord('sys_store_app');
+                var found = false;
+                
+                // Try 1: Match by sys_code
+                depApp.addQuery('sys_code', depId);
+                depApp.setLimit(1);
+                depApp.query();
+                if (depApp.next()) {
+                    found = true;
+                } else {
+                    // Try 2: Match by scope
+                    depApp = new GlideRecord('sys_store_app');
+                    depApp.addQuery('scope', depId);
+                    depApp.setLimit(1);
+                    depApp.query();
+                    if (depApp.next()) {
+                        found = true;
+                    } else {
+                        // Try 3: Match by name (case-insensitive)
+                        depApp = new GlideRecord('sys_store_app');
+                        depApp.addQuery('name', 'LIKE', depId);
+                        depApp.setLimit(1);
+                        depApp.query();
+                        if (depApp.next()) {
+                            found = true;
+                        }
+                    }
+                }
+                
+                if (found) {
+                    depName = depApp.getValue('name') || depName;
+                    if (depApp.getValue('install_date')) {
+                        status = 'installed';
+                    }
+                } else {
+                    // Clean up the ID for display if no match found
+                    // Convert "com.snc.app_name" to "App Name"
+                    depName = depId
+                        .replace(/^com\.snc\./i, '')
+                        .replace(/^sn_/i, '')
+                        .replace(/_/g, ' ')
+                        .split(' ')
+                        .map(function(word) {
+                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                        })
+                        .join(' ');
+                }
+                
+                dependencies.push({
+                    name: depName,
+                    id: depId,
+                    status: status
+                });
+            }
+            
+        } catch (e) {
+            gs.error('StoreAppManager - _getAppDependencies error for ' + appSysId + ': ' + e.message);
+        }
+        return dependencies;
     },
     
     type: 'StoreAppManager'
