@@ -1,6 +1,6 @@
 # Store App Update Manager
 
-![Version](https://img.shields.io/badge/version-0.0.1-blue) ![ServiceNow](https://img.shields.io/badge/ServiceNow-Fluent%20SDK%204.2-green) ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![ServiceNow](https://img.shields.io/badge/ServiceNow-Fluent%20SDK%204.2-green) ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 Update multiple ServiceNow Store apps with one click. **Store App Update Manager** brings batch operations, real-time progress tracking, and intelligent safety checks to your instance—built with React, TypeScript, and ServiceNow Fluent SDK.
 

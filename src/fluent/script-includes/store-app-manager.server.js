@@ -197,6 +197,9 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
                         }
                     }
                 }
+                
+                // Check for blocked dependencies and cascade unavailability
+                this._checkAndMarkBlockedDependencies(result);
             }
             
             return JSON.stringify(result);
@@ -672,6 +675,146 @@ StoreAppManager.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
             return Array.isArray(parsed) ? parsed : defaultValue;
         } catch (e) {
             return defaultValue;
+        }
+    },
+    
+    /**
+     * Check if dependencies are blocked and cascade unavailability
+     * @param apps - array of app objects to check and modify
+     */
+    _checkAndMarkBlockedDependencies: function(apps) {
+        try {
+            // Build a map of app sys_id to app object for quick lookup
+            var appMap = {};
+            var appsByScope = {};
+            var appsBySysCode = {};
+            
+            for (var i = 0; i < apps.length; i++) {
+                var app = apps[i];
+                appMap[app.sys_id] = app;
+                
+                // Also need to look up apps by scope and sys_code for dependency matching
+                var storeApp = new GlideRecord('sys_store_app');
+                if (storeApp.get(app.sys_id)) {
+                    var scope = storeApp.getValue('scope');
+                    var sysCode = storeApp.getValue('sys_code');
+                    if (scope) appsByScope[scope] = app;
+                    if (sysCode) appsBySysCode[sysCode] = app;
+                }
+            }
+            
+            // Iteratively check dependencies - may need multiple passes for cascading
+            var madeChanges = true;
+            var maxIterations = 10; // Prevent infinite loops
+            var iterations = 0;
+            
+            while (madeChanges && iterations < maxIterations) {
+                madeChanges = false;
+                iterations++;
+                
+                for (var j = 0; j < apps.length; j++) {
+                    var currentApp = apps[j];
+                    
+                    // Skip if already marked unavailable
+                    if (currentApp.is_unavailable) {
+                        continue;
+                    }
+                    
+                    // Check each dependency
+                    if (!currentApp.dependencies || currentApp.dependencies.length === 0) {
+                        continue;
+                    }
+                    
+                    var blockedDeps = [];
+                    
+                    for (var k = 0; k < currentApp.dependencies.length; k++) {
+                        var dep = currentApp.dependencies[k];
+                        var depId = dep.id;
+                        
+                        // Check if this dependency is in our app list and is unavailable
+                        var depApp = appMap[depId] || appsByScope[depId] || appsBySysCode[depId];
+                        
+                        if (depApp && depApp.is_unavailable) {
+                            blockedDeps.push(dep.name || depId);
+                            continue;
+                        }
+                        
+                        // Check if the dependency itself has block_install on its target version
+                        var depStoreApp = new GlideRecord('sys_store_app');
+                        var foundDep = false;
+                        
+                        // Try multiple lookup strategies
+                        if (depStoreApp.get('sys_code', depId)) {
+                            foundDep = true;
+                        } else if (depStoreApp.get('scope', depId)) {
+                            foundDep = true;
+                        } else {
+                            depStoreApp = new GlideRecord('sys_store_app');
+                            depStoreApp.addQuery('name', 'LIKE', depId);
+                            depStoreApp.setLimit(1);
+                            depStoreApp.query();
+                            if (depStoreApp.next()) {
+                                foundDep = true;
+                            }
+                        }
+                        
+                        if (foundDep) {
+                            var depLatestVersion = depStoreApp.getValue('latest_version');
+                            var depSysId = depStoreApp.getUniqueValue();
+                            
+                            // Check if target version is blocked
+                            if (depLatestVersion) {
+                                var blockedCheck = new GlideRecord('sys_app_version');
+                                blockedCheck.addQuery('source_app_id', depSysId);
+                                blockedCheck.addQuery('version', depLatestVersion);
+                                blockedCheck.addQuery('block_install', true);
+                                blockedCheck.setLimit(1);
+                                blockedCheck.query();
+                                
+                                if (blockedCheck.next()) {
+                                    blockedDeps.push(dep.name || depId);
+                                    continue;
+                                }
+                            }
+                            
+                            // Check for critical indicators on the dependency
+                            var depIndicators = this._parseJSON(depStoreApp.getValue('indicators'), []);
+                            var criticalIndicators = [
+                                'not_available_for_instance_type',
+                                'incompatible',
+                                'entitlement_revoked',
+                                'trial_deactivation_requested'
+                            ];
+                            
+                            for (var ci = 0; ci < criticalIndicators.length; ci++) {
+                                if (this._hasIndicatorWithId(depIndicators, criticalIndicators[ci])) {
+                                    blockedDeps.push(dep.name || depId);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If any dependencies are blocked, mark this app as unavailable
+                    if (blockedDeps.length > 0) {
+                        currentApp.is_unavailable = true;
+                        var depReason = 'Depends on blocked/unavailable apps: ' + blockedDeps.join(', ');
+                        currentApp.unavailable_reason = currentApp.unavailable_reason ? 
+                            currentApp.unavailable_reason + '; ' + depReason : depReason;
+                        madeChanges = true;
+                        
+                        gs.info('StoreAppManager - Marking app as unavailable due to blocked dependencies: ' + 
+                               currentApp.name + ' (depends on: ' + blockedDeps.join(', ') + ')');
+                    }
+                }
+            }
+            
+            if (iterations >= maxIterations) {
+                gs.warn('StoreAppManager - _checkAndMarkBlockedDependencies: Reached maximum iterations, may have circular dependencies');
+            }
+            
+        } catch (e) {
+            gs.error('StoreAppManager - _checkAndMarkBlockedDependencies error: ' + e.message);
         }
     },
     
