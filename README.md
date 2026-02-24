@@ -21,7 +21,7 @@ Updating apps manually wastes time: clicking through screens, checking versions 
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/yourusername/StoreAppUpdater.git
+git clone https://github.com/DanielMadsenDK/StoreAppUpdater
 cd StoreAppUpdater
 npm install
 
