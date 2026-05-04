@@ -33,11 +33,11 @@ declare global {
                         table: 'sys_script_include'
                         id: 'e0ff7c35a77f4e149d7c7715f7e4c21f'
                     }
-                    'x_1118332_store_ap/main': {
+                    'x_961692_store_ap/main': {
                         table: 'sys_ux_lib_asset'
                         id: '639a193415e149339d04e43b22feb9be'
                     }
-                    'x_1118332_store_ap/main.js.map': {
+                    'x_961692_store_ap/main.js.map': {
                         table: 'sys_ux_lib_asset'
                         id: 'c1afea9a5c214f54b7b0f592f52a5faa'
                     }

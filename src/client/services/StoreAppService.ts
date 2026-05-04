@@ -20,7 +20,7 @@ class ServiceError extends Error {
  */
 export class StoreAppService {
     private static instance: StoreAppService
-    private scriptInclude = 'x_1118332_store_ap.StoreAppManager'
+    private scriptInclude = 'x_961692_store_ap.StoreAppManager'
 
     private constructor() {
         // Private constructor to prevent direct instantiation
@@ -47,7 +47,7 @@ export class StoreAppService {
             try {
                 const ga = new GlideAjax(this.scriptInclude)
                 ga.addParam(AJAX_PARAMS.NAME, methodName)
-                
+
                 if (params) {
                     Object.entries(params).forEach(([key, value]) => {
                         ga.addParam(key, value)

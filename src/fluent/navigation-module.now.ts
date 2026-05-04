@@ -10,7 +10,7 @@ export const storeAppModule = Record({
         application: storeAppMenu.$id,
         active: true,
         link_type: 'DIRECT',
-        query: 'x_1118332_store_ap_updater.do',
+        query: 'x_961692_store_ap_updater.do',
         order: 100,
         hint: 'View and update store applications',
         roles: ['admin'],

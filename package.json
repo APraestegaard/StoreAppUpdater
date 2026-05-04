@@ -13,13 +13,13 @@
     "types": "now-sdk dependencies"
   },
   "devDependencies": {
-    "@servicenow/sdk": "4.2.0",
-    "@servicenow/glide": "27.0.3",
-    "eslint": "8.50.0",
     "@servicenow/eslint-plugin-sdk-app-plugin": "4.2.0",
+    "@servicenow/glide": "27.0.3",
     "@servicenow/isomorphic-rollup": "^1.2.11",
-    "@types/react": "19.x",
-    "@types/react-dom": "19.x",
+    "@servicenow/sdk": "4.2.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "8.50.0",
     "typescript": "5.5.4"
   },
   "dependencies": {
